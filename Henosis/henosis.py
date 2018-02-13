@@ -15,8 +15,8 @@ from collections import OrderedDict
 import datetime
 import dill
 from flask import Flask, make_response, render_template, session
-from flask_httpauth import HTTPBasicAuth
-from flask_restful import Api, reqparse, Resource
+from flask_restful import Api, reqparse, request, Resource
+from functools import wraps
 from gevent.wsgi import WSGIServer
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
@@ -40,11 +40,42 @@ import uuid
 import warnings
 import yaml
 
-# global auth
-auth = HTTPBasicAuth()
-
 
 # resources #
+class _Auth:
+
+    @staticmethod
+    def check_auth(req_username, req_password, config_username=None, config_password=None):
+        if config_username is not None and config_password is not None:
+            username_bool = req_username == config_username
+            password_bool = req_password == config_password
+            if username_bool is True and password_bool is True:
+                return True
+            return False
+        return True
+
+    @staticmethod
+    def authenticate():
+        message = {'message': "Incorrect username and/or password or username/password not needed. "
+                              "Please authenticate or retry without username/password."}
+        resp = make_response(json.dumps(message), 401)
+        return resp
+
+    @staticmethod
+    def requires_auth(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            auth = request.authorization
+            config = args[0].server_config.sys_config.api_auth
+            if not auth:
+                pass
+            elif not _Auth.check_auth(auth.username, auth.password, config[0], config[1]):
+                return _Auth.authenticate()
+            return f(*args, **kwargs)
+
+        return decorated
+
+
 class _Recommendations(Resource):
     '''
     This class is used to interface with the recommender system framework and provide recommendations for fields.
@@ -59,13 +90,12 @@ class _Recommendations(Resource):
     def __init__(self, server_config):
         self.server_config = server_config
 
-    # @api.representation('application/json')
-    @auth.login_required
+    @_Auth.requires_auth
     def get(self):
         ts_in = time.time()
         parser = reqparse.RequestParser()
         # print(reqparse.request.json) # should not be none, or allow acceptance of this
-        parser.add_argument('formData', type=str)
+        parser.add_argument('formData')
         args = parser.parse_args()
         # ensure proper JSON
         formatted = json.loads(args['formData'].replace("'", '"'))
@@ -95,20 +125,20 @@ class _ModelInfo(Resource):
     def __init__(self, server_config):
         self.server_config = server_config
 
-    @auth.login_required
+    @_Auth.requires_auth
     def get(self):
         parser = reqparse.RequestParser()
-        parser.add_argument('modelInfo', type=str)
+        parser.add_argument('modelInfo')
         args = parser.parse_args()
         # ensure proper JSON
         if args['modelInfo'] is not None:
             formatted = json.loads(args['modelInfo'].replace("'", '"'))
             # obtain the models that match the provided attributes
-            response = _ElasticSearch().Models(self.server_config).get_models(**formatted)
+            r = _ElasticSearch().Models(self.server_config).get_models(**formatted)
         else:
-            response = _ElasticSearch().Models(self.server_config).get_models()
-
-        return response  # use make_response
+            r = _ElasticSearch().Models(self.server_config).get_models()
+        response = make_response(json.dumps(r[0]), r[1])
+        return response
 
 
 class _MultiColumnLabelEncoder:
@@ -1326,41 +1356,43 @@ class Server:
 
         return self
 
-    @staticmethod
-    @auth.verify_password
-    def verify(username, password):
-        if not (username and password):
-            # if self.sys_config.api_auth is None:
-            #     return True
-            return False
-        # can't pass self... how to circumvent?
-        return tuple((username, password)) == tuple(('recsys', 'recsys'))
-        # return True
-
     def run(self, routes=None, api_resources=None, port=5005):
         self.port = port
 
-        app = Flask(__name__)
-        api = Api(app)
-
-        api.add_resource(_Recommendations, self.base_url + '/recommend', resource_class_kwargs={'server_config': self})
-        api.add_resource(_ModelInfo, self.base_url + '/models', resource_class_kwargs={'server_config': self})
-
-        app.secret_key = "1aa30xPxgo78ba8xa984Py"
-
-        if api_resources:
-            for r in api_resources:
-                api.add_resource(r['class'], self.sys_config.api_index + self.sys_config.api_version + r['endpoint'])
-
+        # add custom templates
         if routes:
+            template_dir = None
+            static_dir = None
+            for r in routes:
+                # clean this ish up eventually, no like.
+                if static_dir is None:
+                    static_dir = r['static_directory']
+                if template_dir is None:
+                    template_dir = r['template_directory']
+                if r['static_directory'] != static_dir:
+                    logging.warning('All static directories must be the same for custom templates.', UserWarning)
+                    sys.exit()
+                if r['template_directory'] != template_dir:
+                    logging.warning('All template directories must be the same for custom templates.', UserWarning)
+                    sys.exit()
+            app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
             for r in routes:
                 exec("""\n@app.route('""" + r['route'] + """')\ndef """ + r[
                     'function_name'] + """():\n    return render_template('""" + r['template'] + """')\n""")
             logging.info('Routes added successfully.')
+        else:
+            app = Flask(__name__)
+
+        # add API resources
+        api = Api(app)
+        api.add_resource(_Recommendations, self.base_url + '/recommend', resource_class_kwargs={'server_config': self})
+        api.add_resource(_ModelInfo, self.base_url + '/models', resource_class_kwargs={'server_config': self})
+        if api_resources:
+            for r in api_resources:
+                api.add_resource(r['class'], self.sys_config.api_index + self.sys_config.api_version + r['endpoint'])
 
         # spin up app
         logging.info('Running server on port: ' + str(self.port))
         app.debug = True
         server = WSGIServer(("", self.port), app)
         server.serve_forever()
-

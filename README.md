@@ -241,6 +241,8 @@ m.tag_generator(clean_text, 'cleanText', ['title'])
 print(m.independent)
 ```
 
+**Note:** Generated features currently limited to data available from form data sent in requests.
+
 #### Store Model
 
 This call stores the pickled model in AWS S3 and indexes the model information
@@ -282,13 +284,15 @@ sent in each request.
 import app as henosis # you may need to specify a path using sys first
 ```
 
+#### Start an Instance
+
 ```python
 s = henosis.Server().config(yaml_path='config.yaml') # may need to be absolute path
 s.run()
 ```
 
 While a Henosis can be run on an nginx server or Heroku, we recommend using
-Docker and some sort of container manager such as Kubernetes or
+Docker and a container manager such as Kubernetes or
 Docker Swarm for larger applications.
 
 ### Session and Request Tracking
