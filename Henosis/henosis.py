@@ -43,6 +43,9 @@ import yaml
 
 # resources #
 class _Auth:
+    '''
+    This class enables simple authentication for routes using the credentials specified in config.yaml.
+    '''
 
     @staticmethod
     def check_auth(req_username, req_password, config_username=None, config_password=None):
@@ -134,9 +137,37 @@ class _ModelInfo(Resource):
         if args['modelInfo'] is not None:
             formatted = json.loads(args['modelInfo'].replace("'", '"'))
             # obtain the models that match the provided attributes
-            r = _ElasticSearch().Models(self.server_config).get_models(**formatted)
+            r = _ElasticSearch().Models(self.server_config).get(**formatted)
         else:
-            r = _ElasticSearch().Models(self.server_config).get_models()
+            r = _ElasticSearch().Models(self.server_config).get()
+        response = make_response(json.dumps(r[0]), r[1])
+        return response
+
+
+class _RequestLogs(Resource):
+    '''
+    This class is used to interface with the recommender system framework and provide request log information based
+    on passed filters. Values of passed fields must be passed as strings and lowercase.
+
+    Example request:
+    curl http://localhost:5005/api/v0.1/requestlog -d "requestInfo={'responseStatusCode': 200}"
+    '''
+
+    def __init__(self, server_config):
+        self.server_config = server_config
+
+    @_Auth.requires_auth
+    def get(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument('requestInfo')
+        args = parser.parse_args()
+        # ensure proper JSON
+        if args['requestInfo'] is not None:
+            formatted = json.loads(args['requestInfo'].replace("'", '"'))
+            # obtain the models that match the provided attributes
+            r = _ElasticSearch().Requests(self.server_config).get(**formatted)
+        else:
+            r = _ElasticSearch().Requests(self.server_config).get()
         response = make_response(json.dumps(r[0]), r[1])
         return response
 
@@ -332,7 +363,7 @@ class _FormProcessor(object):
                 m['_source']['lastCall'] = datetime.datetime.fromtimestamp(time.time()).strftime(
                     '%Y-%m-%dT%H:%M:%S')
                 self.models_queried.append(m['_id'])
-                self.index.update_model(update_dict=m['_source'])
+                self.index.update(update_dict=m['_source'])
         if self.predict_probabilities:
             self.sort_proba()
         else:
@@ -341,14 +372,14 @@ class _FormProcessor(object):
     def get_recommendations(self, form_data):
         try:
             # retrieve any deployed models from the index
-            response = self.index.get_models(deployed=True)
+            response = self.index.get(deployed=True)
             models = response[0]['models']
             # self.index.models_last_refresh = response[0]['models_last_refresh']
             # print(self.index.models_last_refresh)
         except Exception as e:
             logging.warning(e)
             warnings.warn(e)
-            return {'description': 'Error retrievings models from Elasticsearch.'}, 400
+            return {'description': 'Error retrieving models from Elasticsearch.'}, 400
 
         try:
             self.process_form(form_data, models)
@@ -429,11 +460,14 @@ class _SessionManager:
 
         r = json.loads(response.get_data().decode('utf8'))
 
+        timestamp_in = datetime.datetime.fromtimestamp(self.timeIn).strftime('%Y-%m-%dT%H:%M:%S')
+        timestamp_out = datetime.datetime.fromtimestamp(self.timeOut).strftime('%Y-%m-%dT%H:%M:%S')
+
         request_log = {
             "sessionId": self.sessionId,
             "sessionExpireDate": self.sessionExpireDate,
-            "timeIn": self.timeIn,
-            "timeOut": self.timeOut,
+            "timeIn": timestamp_in,
+            "timeOut": timestamp_out,
             "timeElapsed": self.timeElapsed,
             "responseStatusCode": self.responseCode,
             "responseDescription": self.responseDescription,
@@ -446,6 +480,30 @@ class _SessionManager:
 
 
 class _ElasticSearch:
+
+    class Common:
+
+        @staticmethod
+        def build_query(kwargs, operation="must"):
+            q = {
+                "query": {
+                    "constant_score": {
+                        "filter": {
+                            "bool": {
+                                operation: []
+                            }
+                        }
+                    }
+                }
+            }
+            for k in kwargs:
+                if isinstance(k, dict):
+                    for d_k in k:
+                        q['query']['constant_score']['filter']['bool']['must'].append({"term": {d_k: k[d_k]}})
+                else:
+                    q['query']['constant_score']['filter']['bool']['must'].append({"term": {k: kwargs[k]}})
+            return q
+
     class Connection(object):
 
         def __init__(self):
@@ -595,23 +653,8 @@ class _ElasticSearch:
             self.search_size = server_config.es_connection_requestlog.search_size
 
         def get(self, **kwargs):
-            q = {
-                "query": {
-                    "constant_score": {
-                        "filter": {
-                            "bool": {
-                                "must": []
-                            }
-                        }
-                    }
-                }
-            }
-            for k in kwargs:
-                if isinstance(k, dict):
-                    for d_k in k:
-                        q['query']['constant_score']['filter']['bool']['must'].append({"term": {d_k: k[d_k]}})
-                else:
-                    q['query']['constant_score']['filter']['bool']['must'].append({"term": {k: kwargs[k]}})
+
+            q = _ElasticSearch.Common.build_query(kwargs)
 
             r = requests.get(
                 self.host + self.index + '/_search?size=' + str(self.search_size),
@@ -654,6 +697,23 @@ class _ElasticSearch:
                            'description': 'Error indexing request log ' + r['_id'] + '.'
                        }, 400
 
+        def count(self):
+            r = requests.get(
+                self.host + self.index + '/_count',
+                verify=self.ssl_verify,
+                auth=self.auth
+            ).json()
+
+            if r['_shards']['failed'] > 0:
+                logging.warning(r)
+                warnings.warn(r)
+                return {
+                           'response': r,
+                           'description': 'Error updating model ' + r['_id'] + '.'
+                       }, 400
+            else:
+                return {'count': r['count'], 'description': 'The number of request logs indexed.'}, 200
+
     class Models(object):
 
         def __init__(self, server_config):
@@ -665,33 +725,9 @@ class _ElasticSearch:
             self.auth = server_config.es_connection_models.auth
             self.search_size = server_config.es_connection_models.search_size
 
-        def get_model(self, model_id):
-            r = requests.get(
-                self.host + self.index + '/' + str(model_id),
-                verify=self.ssl_verify,
-                auth=self.auth
-            ).json()
+        def get(self, **kwargs):
 
-            return r['_source']
-
-        def get_models(self, **kwargs):
-            q = {
-                "query": {
-                    "constant_score": {
-                        "filter": {
-                            "bool": {
-                                "must": []
-                            }
-                        }
-                    }
-                }
-            }
-            for k in kwargs:
-                if isinstance(k, dict):
-                    for d_k in k:
-                        q['query']['constant_score']['filter']['bool']['must'].append({"term": {d_k: k[d_k]}})
-                else:
-                    q['query']['constant_score']['filter']['bool']['must'].append({"term": {k: kwargs[k]}})
+            q = _ElasticSearch.Common.build_query(kwargs)
 
             r = requests.get(
                 self.host + self.index + '/_search?size=' + str(self.search_size),
@@ -707,11 +743,10 @@ class _ElasticSearch:
             else:
                 return {
                            'models': r['hits']['hits'],
-                           # 'models_last_refresh': self.models_last_refresh,
-                           'description': 'All models in the Elasticsearch index.'
+                           'description': 'Models that match the specified search criteria in the Elasticsearch index.'
                        }, 200
 
-        def update_model(self, model=None, update_dict=None):
+        def update(self, model=None, update_dict=None):
 
             if model:
                 model_info = {
@@ -780,7 +815,7 @@ class _ElasticSearch:
                                'description': 'Error updating model ' + r['_id'] + '.'
                            }, 400
 
-        def model_count(self):
+        def count(self):
             r = requests.get(
                 self.host + self.index + '/_count',
                 verify=self.ssl_verify,
@@ -821,8 +856,7 @@ class Models(object):
     def _check_path(self, path):
         if 'Contents' in self.server_config.s3_connection.list_objects(
                 Bucket=self.server_config.sys_config.s3_bucket).keys():
-            for key in self.server_config.s3_connection.list_objects(Bucket=self.server_config.sys_config.s3_bucket)[
-                'Contents']:
+            for key in self.server_config.s3_connection.list_objects(Bucket=self.server_config.sys_config.s3_bucket)['Contents']:
                 if key['Key'] == path:
                     logging.warning('Model path already exists in S3 bucket. Please specify another path.', UserWarning)
                     warnings.warn('Model path already exists in S3 bucket. Please specify another path.', UserWarning)
@@ -910,7 +944,7 @@ class Models(object):
             if 'generator_path' in i.keys():
                 os.remove('tmp/' + i['generator_path'])
 
-        self.index.update_model(model)
+        self.index.update(model)
 
     def _deploy(self, model):
         '''
@@ -919,7 +953,7 @@ class Models(object):
         :return:
         '''
 
-        self.index.update_model(model)
+        self.index.update(model)
 
     @staticmethod
     def _train(model, X, y, balance=None, encoder=None):
@@ -1244,6 +1278,7 @@ class _LoadConfig:
         self.api_missing = None
         self.api_session_expiration = None
         self.api_auth = None
+        self.api_secret = None
         self.models_preload_pickles = None
         self.pickle_jar = None
         self.models_predict_probabilities = None
@@ -1268,7 +1303,7 @@ class _LoadConfig:
 
                 # None in yaml file is read as string but needs to be converted
                 config_params['elasticsearch']['auth'] = None if config_params['elasticsearch']['auth'] == 'None' else \
-                config_params['elasticsearch']['auth']
+                    config_params['elasticsearch']['auth']
 
                 self.elasticsearch_host = config_params['elasticsearch']['host']
                 self.elasticsearch_index_models = config_params['elasticsearch']['models']['index']
@@ -1280,6 +1315,7 @@ class _LoadConfig:
                 self.api_missing = config_params['api']['missing']
                 self.api_session_expiration = config_params['api']['session_expiration']
                 self.api_auth = config_params['api']['auth']
+                self.api_secret = config_params['api']['secret']
                 self.models_preload_pickles = config_params['models']['preload_pickles']
                 self.models_predict_probabilities = config_params['models']['predict_probabilities']
                 self.models_top_n = config_params['models']['top_n']
@@ -1387,9 +1423,13 @@ class Server:
         api = Api(app)
         api.add_resource(_Recommendations, self.base_url + '/recommend', resource_class_kwargs={'server_config': self})
         api.add_resource(_ModelInfo, self.base_url + '/models', resource_class_kwargs={'server_config': self})
+        api.add_resource(_RequestLogs, self.base_url + '/requestlogs', resource_class_kwargs={'server_config': self})
         if api_resources:
             for r in api_resources:
                 api.add_resource(r['class'], self.sys_config.api_index + self.sys_config.api_version + r['endpoint'])
+
+        # add app secret key from config
+        app.secret_key = self.sys_config.api_secret
 
         # spin up app
         logging.info('Running server on port: ' + str(self.port))

@@ -34,16 +34,17 @@ activate :autoprefixer do |config|
 end
 
 # Github pages require relative links
-activate :relative_assets
+# activate :relative_assets
 set :relative_links, true
 
 # Build Configuration
+set :build_dir, "#{File.dirname(__FILE__)}/docs"
 configure :build do
   # If you're having trouble with Middleman hanging, commenting
   # out the following two lines has been known to help
   activate :minify_css
   activate :minify_javascript
-  # activate :relative_assets
+  activate :relative_assets
   # activate :asset_hash
   # activate :gzip
 end

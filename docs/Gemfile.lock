@@ -91,7 +91,9 @@ GEM
       activesupport (>= 3.1)
     parallel (1.10.0)
     public_suffix (2.0.5)
+    puma (3.11.2)
     rack (2.0.1)
+    rake (11.3.0)
     rb-fsevent (0.9.8)
     rb-inotify (0.9.8)
       ffi (>= 0.5.0)
@@ -119,6 +121,8 @@ DEPENDENCIES
   middleman-sprockets (~> 4.1.0)
   middleman-syntax (~> 3.0.0)
   nokogiri (~> 1.6.8)
+  puma (~> 3.4)
+  rake (~> 11.1)
   redcarpet (~> 3.4.0)
   rouge (~> 2.0.5)
 
@@ -126,4 +130,4 @@ RUBY VERSION
    ruby 2.3.3p222
 
 BUNDLED WITH
-   1.14.5
+   1.16.1
