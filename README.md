@@ -60,7 +60,7 @@ repository and pull Henosis to a local directory.
 
 ## Documentation
 
-The latest Henosis documentation is available at [henosis.io/docs](https://www.henosis.io/docs)
+The latest Henosis documentation is available [here](https://henosis-docs.herokuapp.com/)
 and covers how to use Henosis for modeling and providing recommendations
 within your form-containing applications.
 
