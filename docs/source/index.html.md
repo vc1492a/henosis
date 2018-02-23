@@ -497,6 +497,60 @@ m.test(d)
 print(json.dumps(m.test_results, indent=4))
 ```
 
+### Tagging Feature Generators
+
+Henosis has built-in functionality to handle feature generation for
+data provided in the request for recommendations, creating new features
+from incoming data for use in the available models. For example, a
+form may contain raw text that can be used to make predictions for a
+particular form field, but this raw text may need to be processed before
+use in the models. This functionality can be used to generate new features
+from the data provided in the recommendation request itself.
+
+> Define a Function for Generating a New Feature
+
+```python
+# a function that processes text, as an example
+def clean_text(s):
+    import re
+    import html
+    import string
+    import unicodedata
+    # use regular expressions to remove html tags from text
+    s = re.sub('<[^<]+?>', '', s)  # some strings are of float type?
+    # replace HTML entities with proper string encodings
+    s = html.unescape(s)
+    # if no space after end of sentence punctuation, add a space (for later tokenization)
+    s = re.sub(r'(\[.?!,/])', r' ', s)
+    # remove punctuation from the text
+    translator = str.maketrans("", "", string.punctuation)
+    s = str(s.translate(translator))
+    # ensure all text is lowercase
+    s = " ".join([token.lower() for token in s.split()])
+    # replace any unicode characters with ASCII representation.
+    s = str(unicodedata.normalize('NFKD', s).encode('ascii', 'ignore'), encoding='utf-8')
+    if len(s) == 0:
+        s = '<empty>'
+
+    return s
+```
+
+> Tag that Function for a Model
+
+```python
+m.tag_generator(clean_text, 'cleanText', ['title'])
+print(m.independent) # to ensure new feature is present
+```
+
+After tagging feature generators, Henosis will process incoming data used to
+generate new features using the function in the tag, adds that new
+field to the data used to provide recommendations. This process must be
+repeated for each model which uses features generated from the incoming data.
+
+**Note:** If using external libraries in your feature generation, this must
+be defined as an import *within the function*. In addition, the deployed
+Henosis instance must also have the library installed on that machine.
+
 ### Store
 
 Storing models with Henosis requires a specified **config.yaml** file with

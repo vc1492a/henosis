@@ -11,6 +11,21 @@ and integrated across different enterprise applications.
 
 Henosis is in **active development** and is released as alpha software.
 
+## How Does Henosis Work?
+
+Henosis works by acting as a bridge between end users and data scientists
+which train recommendation (predictive) models. There are several classes
+that facilitate the interaction between data, scikit-learn models, and a
+REST API that provides recommendations and other information.
+
+![Henosis Flowchart](https://i.imgur.com/EXUh0cx.png)
+
+Henosis classes (bold borders) interface with the data scientist or statistician,
+developers querying for recommendations, and trained models. When queried for
+recommendations, Henosis references model information in Elasticsearch,
+loads appropriate models from AWS S3, and serves recommendations by using
+data available in the query (REST API request).
+
 ## Prerequisites
 
 - Python 3.6+ (untested on lower versions) with the following packages:
@@ -38,21 +53,6 @@ Henosis is in **active development** and is released as alpha software.
 create an index and specify a mapping (documentation is provided and helpful
 scripts are available in the *scripts* directory).
 
-## How Does Henosis Work?
-
-Henosis works by acting as a bridge between end users and data scientists
-which train recommendation (predictive) models. There are several classes
-that facilitate the interaction between data, scikit-learn models, and a
-REST API that provides recommendations and other information.
-
-![Henosis Flowchart](https://i.imgur.com/EXUh0cx.png)
-
-Henosis classes (bold borders) interface with the data scientist or statistician,
-developers querying for recommendations, and trained models. When queried for
-recommendations, Henosis references model information in Elasticsearch,
-loads appropriate models from AWS S3, and serves recommendations by using
-data available in the query (REST API request).
-
 ## Getting Started
 
 A *pip install* is in the works, but for now simply fork the
@@ -60,24 +60,33 @@ repository and pull Henosis to a local directory.
 
 ## Documentation
 
-The latest Henosis documentation is available [here](https://henosis-docs.herokuapp.com/)
+The latest Henosis documentation is available [here](https://henosis-docs.herokuapp.com)
 and covers how to use Henosis for modeling and providing recommendations
 within your form-containing applications.
 
 ## Motivation
 
-The [NASA Jet Propulsion Laboratory](https://jpl.nasa.gov/) (JPL) has many internal enterprise
-systems that collect data from large, user-populated forms (sometimes
-upwards of 70 fields). These forms contain valuable spacecraft diagnostic
-information input into the system by operations engineers and other subject
-matter experts, but are very time consuming. We wanted to provide
-users interacting with large forms recommendations on categorical inputs
-to reduce the total time required and improve the efficiency of employees
-interacting with these types of systems. Initially an internal effort
-that began with a single use case, we decided to continue development
-of Henosis as open-source software to foster collaboration and
-publicly release a capability that's potentially useful to others while
-development continues.
+In October 2017, our data science team at the [NASA Jet Propulsion Laboratory](https://jpl.nasa.gov/) (JPL)
+was approached by the Office of Safety and Mission Success (5X) to improve
+processes for reporting in the Problem Reporting System (PRS). PRS is an internal
+tool that allows engineers to submit Problem Failure Reports (PFRs) and Incident
+Surprise, Anomaly reports (ISAs), which document pre-launch test failures and
+post-launch operational anomalies experienced by spacecraft. These reports not
+only serve as a record of past problems but also of past solutions to the problems described.
+
+Despite their value, the reports contained within the PRS are costly to fill out and submit.
+With dozens of textual, categorical, and other inputs in the forms, the PFRs and ISAs
+draw valuable time away from mission staff to the annotation of internal forms — time
+better spent with spacecraft operations and mission work. A solution was needed that
+would reduce the time needed to file reports in PRS while ensuring ease of use for
+users already familiar with the current PRS system, such as a recommendation system
+for form fields. What we needed from a data science and IT operations perspective
+was a straightforward process to deploy a simple recommendation system for use in
+enterprise applications containing categorical form inputs (like dropdown menus).
+
+While the initial effort focused on one internal use case, Henosis was developed
+as a generalized, open-source framework and is freely available for use in
+other applications.
 
 ## License
 

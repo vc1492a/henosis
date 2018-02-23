@@ -41,6 +41,11 @@ import warnings
 import yaml
 
 
+__author__ = 'Valentino Constantinou'
+__version__ = '0.0.1'
+__license__ = 'Apache License, Version 2.0'
+
+
 # resources #
 class _Auth:
     '''
