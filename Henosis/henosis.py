@@ -15,6 +15,7 @@ from collections import OrderedDict
 import datetime
 import dill
 from flask import Flask, make_response, render_template, session
+from flask_cors import CORS
 from flask_restful import Api, reqparse, request, Resource
 from functools import wraps
 from gevent.wsgi import WSGIServer
@@ -42,7 +43,7 @@ import yaml
 
 
 __author__ = 'Valentino Constantinou'
-__version__ = '0.0.1'
+__version__ = '0.0.2'
 __license__ = 'Apache License, Version 2.0'
 
 
@@ -1426,6 +1427,7 @@ class Server:
 
         # add API resources
         api = Api(app)
+        CORS(app)
         api.add_resource(_Recommendations, self.base_url + '/recommend', resource_class_kwargs={'server_config': self})
         api.add_resource(_ModelInfo, self.base_url + '/models', resource_class_kwargs={'server_config': self})
         api.add_resource(_RequestLogs, self.base_url + '/requestlogs', resource_class_kwargs={'server_config': self})
