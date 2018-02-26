@@ -7,7 +7,7 @@ learning models for making form field recommendations, while also providing soft
 and web developers with a REST API that can be easily queried for recommendations
 and integrated across different enterprise applications.
 
-[![PyPi](https://img.shields.io/badge/pypi-0.0.2-green.svg)](https://pypi.python.org/pypi/Henosis/0.0.2)
+[![PyPi](https://img.shields.io/badge/pypi-0.0.3-green.svg)](https://pypi.python.org/pypi/Henosis/0.0.3)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 Henosis is in **active development** and is released as alpha software.

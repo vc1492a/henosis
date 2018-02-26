@@ -1425,9 +1425,12 @@ class Server:
         else:
             app = Flask(__name__)
 
+        # configure cross-origin requests
+        CORS(app, resources={r"/" + self.sys_config.api_index + "/*": {"origins": "*"}}, headers='Content-Type')
+        app.config['SECRET_KEY'] = self.sys_config.api_secret
+
         # add API resources
         api = Api(app)
-        CORS(app)
         api.add_resource(_Recommendations, self.base_url + '/recommend', resource_class_kwargs={'server_config': self})
         api.add_resource(_ModelInfo, self.base_url + '/models', resource_class_kwargs={'server_config': self})
         api.add_resource(_RequestLogs, self.base_url + '/requestlogs', resource_class_kwargs={'server_config': self})
