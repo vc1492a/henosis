@@ -43,7 +43,7 @@ import yaml
 
 
 __author__ = 'Valentino Constantinou'
-__version__ = '0.0.2'
+__version__ = '0.0.5'
 __license__ = 'Apache License, Version 2.0'
 
 
@@ -170,7 +170,7 @@ class _RequestLogs(Resource):
         # ensure proper JSON
         if args['requestInfo'] is not None:
             formatted = json.loads(args['requestInfo'].replace("'", '"'))
-            # obtain the models that match the provided attributes
+            # obtain the request logs that match the provided attributes
             r = _ElasticSearch().Requests(self.server_config).get(**formatted)
         else:
             r = _ElasticSearch().Requests(self.server_config).get()
@@ -420,7 +420,10 @@ class _SessionManager:
             ts = time.time()
             ts_expire = ts + (60 * self.server_config.sys_config.api_session_expiration)
             timestamp_expire = datetime.datetime.fromtimestamp(ts_expire).strftime('%Y-%m-%dT%H:%M:%S')
-            idc = cookies['session_id']
+            if 'session_id' not in cookies.keys():
+                idc = uuid.uuid4().hex
+            else:
+                idc = cookies['session_id']
             self.sessionId = idc
             if idc not in self.session.keys():
                 logging.info('Session ' + idc + ' not in session.')
@@ -1426,8 +1429,7 @@ class Server:
             app = Flask(__name__)
 
         # configure cross-origin requests
-        CORS(app, resources={r"/" + self.sys_config.api_index + "/*": {"origins": "*"}}, headers='Content-Type')
-        app.config['SECRET_KEY'] = self.sys_config.api_secret
+        CORS(app, resources={r"/" + self.sys_config.api_index + "/*": {"origins": "*"}})
 
         # add API resources
         api = Api(app)
