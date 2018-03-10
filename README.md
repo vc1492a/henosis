@@ -70,7 +70,7 @@ If you'd like, you can also fork the repository and pull Henosis to a local dire
 
 ## Documentation
 
-The latest Henosis documentation is available [here](https://henosis-docs.herokuapp.com)
+The latest Henosis documentation is available [here](https://henosis.io/)
 and covers how to use Henosis for modeling and providing recommendations
 within your form-containing applications.
 
