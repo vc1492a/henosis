@@ -1238,6 +1238,10 @@ class Data(object):
         :return:
         '''
 
+        if X.shape[0] != y.shape[0]:
+            logging.warning('X and Y are not the same length.', UserWarning)
+            warnings.warn('X and Y are not the same length.', UserWarning)
+
         # set aside X_test and y_test so that test data is not upsample or downsample data
         X_train, self.X_test, y_train, self.y_test = train_test_split(
             X,
@@ -1253,20 +1257,19 @@ class Data(object):
             self.independent = list(X.columns.values)
         self.balance = balance
 
-        if X.shape[0] != y.shape[0]:
-            logging.warning('X and Y are not the same length.', UserWarning)
-            warnings.warn('X and Y are not the same length.', UserWarning)
-
         if balance == 'upsample':
             ros = RandomOverSampler()
-            X, y = ros.fit_sample(X, y)
+            X_resample, y_resample = ros.fit_sample(X_train, y_train)
         elif balance == 'downsample':
-            ros = RandomUnderSampler()
-            X, y = ros.fit_sample(X, y)
+            rus = RandomUnderSampler()
+            X_resample, y_resample = rus.fit_sample(X_train, y_train)
+        else:
+            X_resample = X
+            y_resample = y
 
         self.X_train, X_test, self.y_train, y_test = train_test_split(
-            X,
-            y,
+            X_resample,
+            y_resample,
             test_size=(1. - share_train),
             stratify=stratify
         )
