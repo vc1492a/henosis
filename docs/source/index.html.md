@@ -371,10 +371,20 @@ work easily in a data scientist or statistician's workflow.
 Two classes, *Data* and *Models*, are used to work with your data and
 scikit-learn models that form the basis of the form recommendation system.
 
-## Data class
+## Data
 
-The Data class facilitates the loading, saving, and splitting of
-data into training and testing splits.
+The Data object facilitates the loading, saving, and splitting of
+data into training and testing splits. The Data object has the following
+attributes:
+
+- _all_: The entire dataframe present in the Data object.
+- _balance_: Indicates whether or not the data has been upsampled, downsampled, or neither.
+- _dependent_: The dependent variable to be used in modeling after data is split.
+- _independent_: The independent variables used in modeling. Must be manually specified when using Numpy arrays.
+- _X_train_: The independent variable(s) data to be used in model training.
+- _X_test_: The independent variable(s) data to be used in model testing.
+- _y_train_: The dependent variable data to be used in model training.
+- _y_test_: The dependent variable data to be used in model testing.
 
 ### Load Data
 
@@ -409,7 +419,7 @@ d.test_train_split(
 ```
 
 Similarly, if using scikit-learn's *CountVectorizer* or *TfidfVectorizer*, a **X_label**
-must be specified.
+must be specified (see example).
 
 > Split Data with CountVectorizer or TfidfVectorizer
 
@@ -444,15 +454,16 @@ print(d.y_test)
 print(d.X_test)
 ```
 
-## Models class
+## Models
 
-The Henosis Models class is used jointly with categorical scikit-learn
+The Henosis Models object is used jointly with categorical scikit-learn
 models to train, test, store, and deploy models for use with form fields.
 While a specified **config.yaml** file is not needed to get started with
 the train and test methods, storing and deploying models to a running
 Henosis instance requires configuration.
 
-**Note:** Henosis only supports categorical scikit-learn models, and
+
+**Note:** Henosis supports categorical scikit-learn models, but
 does not support regression models or collaborative filtering at this time.
 Additionally, it is necessary to ensure that variable names are *identical*
 between models (training data) and the form data sent in each request. This
@@ -471,9 +482,36 @@ scikit-learn model into the SKModel class.
 m = henosis.Models().SKModel(MultinomialNB(alpha=1e-10))
 ```
 
+The SKModel object has the following attributes:
+
+- _call_count_: The number of times the model has been called as a result of an API request.
+- _classes_: The classes of the dependent variable being modeled.
+- _dependent_: The name of the variable being modeled.
+- _deployed_: A boolean which indicates whether or not the model is deployed and available for use.
+- _encoder_: The scikit-learn encoder used in encoding independent variables (optional).
+- _encoder_path_: The file path of the encoder in Amazon S3.
+- _encoder_type_: The type of encoder (e.g. TfidfVectorizer).
+- _estimator_: The scikit-learn estimator used in modeling.
+- _fpr_: The false positive rate for each class in the dependent variable.
+- _independent_: The name(s) of the variable(s) used in modeling the dependent.
+- _last_call_: The date and time of the last time the model was called as a result of an API request.
+- _model_: The scikit-learn model used in modeling.
+- _model_path_: The file path of the model in Amazon S3.
+- _roc_auc_: The ROC AUC for each class in the dependent variable.
+- _test_results_: The overall test results for the model.
+- _test_time_: The amount of time needed (in seconds) to test the model.
+- _test_timestamp_: The date and time of when the model was last tested.
+- _tpr_: The true positive rate for each class in the dependent variable.
+- _train_data_balance_: Indicates whether the data was upsampled, downsampled, or neither.
+- _train_results_: The overall train results for the model.
+- _train_time_: The amount of time needed (in seconds) to test the model.
+- _train_timestamp_: The sate and time of when the model was last trained.
+
+
 ### Train
 
-Once training and testing splits have been created using the Data class,
+Once training and testing splits have been created using the Data class
+and the model has been specified,
 training a model is just one function call away. Simply call *m.train(d)*.
 
 > Train Model
@@ -601,11 +639,20 @@ To take a model offline, simply do the same with *deploy=False*.
 
 # Deployment
 
-## Server class
+## Server
 
-The Server class is used by Henosis to reference the specifications in
+The Server object is used by Henosis to reference the specifications in
 **config.yaml** and to deploy a Flask application that runs the
 Henosis API.
+
+The Server object has the following attributes:
+
+- _base_url_: The base URL for your API.
+- _es_connection_requestlog_: Information about the connection to the request log elasticsearch index, as specified in the config file.
+- _es_connection_models_: Information about the connection to the models elasticsearch index, as specified in the config file.
+- _port_: The port on which the server (application) is running (e.g. 5005).
+- _s3_connection_: The connection information for connecting to the specified Amazon S3 bucket.
+- _sys_config_: A collection of other attributes related to system configuration based on options specified in the config file.
 
 ### Config
 
@@ -631,8 +678,7 @@ for recommendations.
 s.run(port=5005)
 ```
 
-Port 5005 is the default port, but this port **must match** that specified
-in your API host (in config.yaml) for Henosis to run properly.
+Port 5005 is the default port.
 
 ### Custom API Endpoints and Routes
 
@@ -647,7 +693,7 @@ use data not available in the form itself for making recommendations in the pass
 For example, user demographics and past behavioral information are often useful when
 making recommendations, but this information may not be available in the form itself.
 By passing the custom template with a *Flask-RESTful* resource, that resource can
-be used to query for user demographics and pass this information to the **recommendations**
+be used to query for user demographics and pass this information to the recommendations
 route in Henosis for obtaining recommendations.
 
 ```python
