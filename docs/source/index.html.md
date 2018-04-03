@@ -10,39 +10,52 @@ search: true
 
 # About
 
-Henosis, a cloud-native, Python-based form recommender framework that brings
-together model training and testing, storage and deployment, and querying under a
-single framework (Henosis is a classical Greek word for “unity”). Developed using
-user-driven design (UDD), Henosis serves as a bridge between two roles in an
-organization. Henosis provides data scientists with a straight-forward and
-generalizable environment in which to train, test, store, and deploy categorical
-machine learning models for making form field recommendations using scikit-learn,
-while also providing developers with a REST API that can be easily queried for
-recommendations and integrated across different enterprise applications. This
-user-driven design and simplification of the integration process allows for
+## Introduction
+
+Henosis is a cloud-native, lightweight Python-based recommender framework that brings together model training and testing,
+storage and deployment, and querying under a single framework (Henosis is a classical Greek word for “unity”). Henosis provides Data Scientists with a straight-forward and
+generalizable environment in which to train, test, store, and deploy categorical machine
+learning models for making form field recommendations, while also providing software engineers
+and web developers with a REST API that can be easily queried for recommendations
+and integrated across different enterprise applications.
+This user-driven design and simplification of the integration process allows for
 easier deployment of recommender system capability across different enterprise
 applications.
 
-Henosis was developed at the [NASA Jet Propulsion Laboratory](https://jpl.nasa.gov/) (JPL)
+[![PyPi](https://img.shields.io/badge/pypi-0.0.6-green.svg)](https://pypi.python.org/pypi/Henosis/0.0.6)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
+Henosis is in **active development** and is released as alpha software.
+Henosis is being developed at the [NASA Jet Propulsion Laboratory](https://jpl.nasa.gov/) (JPL)
 using user-driven development (UDD) with generous support from the Office of Safety and
 Mission Success (5X).
 
 ## How Does Henosis Work?
 
+Henosis provides recommendations to users of applications, like so:
+
+<br/>
+
+![PRS Demo Gif](https://i.imgur.com/5mzhJzm.gif)
+
+<br/>
+
 Henosis works by acting as a bridge between end users and data scientists
-which train recommendation (predictive) models. There are several classes
+which train predictive models used in making recommendations. There are several classes
 that facilitate the interaction between data, scikit-learn models, and a
 REST API that provides recommendations and other information.
 
 <br/>
 <br/>
 
+<!-- <img src="https://i.imgur.com/EXUh0cx.png" style="max-width: 650px;"/> -->
+
 ![Henosis Flowchart](https://i.imgur.com/EXUh0cx.png)
 
 <br/>
 <br/>
 
-Henosis classes (bold borders) interface with the data scientist or statistician,
+Henosis classes (bold borders above) interface with the data scientist or statistician,
 developers querying for recommendations, and trained models. When queried for
 recommendations, Henosis references model information in Elasticsearch,
 loads appropriate models from AWS S3, and serves recommendations by using
@@ -168,9 +181,9 @@ used or available from Henosis. A few notes on some of the specifications:
     - secret: your AWS S3 secret.
 - api
     - host: the internal host used by Henosis to provide information through its own API.
-    *Must be the same as the port used starting a Henosis instance. Default parameters recommended.*
+    *Must be the same as the port used starting a Henosis instance.*
     - index: the name of your API following the host. *Default parameters recommended.*
-    - version: the version of your API. *Default parameters recommended.*
+    - version: the version of your API.
     - missing: this is the key that tells Henosis whether or not a form field needs a recommendation.
     This value is passed to Henosis in requests for recommendations.
     - session_expiration: defines how long a session lasts when a user starts a new session
@@ -725,7 +738,7 @@ s = henosis.Server().config(yaml_path='config.yaml') # may need absolute path
 s.run(routes=custom_routes, api_resources=custom_endpoints)
 ```
 
-# Henosis API
+# API
 
 Querying Henosis is easy! The Henosis REST API allows software engineers
 and others to query a deployed Henosis instance, providing recommendations
@@ -1096,10 +1109,10 @@ included in the **scripts** directory on Github.
 ### How does Henosis aggregate predictions from different models for a single field?
 
 Henosis uses an ensemble method called *bagging* to aggregate predictions when more than one
-model provides a recommendation for a particular field, provided each model is trained
+model is deployed to provide recommendations for a particular field, as long as each model must be trained
 separately on unique training data and *predict_probas* is set to **True** in **config.yaml**.
-Else, a simple majority vote is taken between each model. In the case when a
-majority vote is used, *top_n* defaults to **one**.
+If *predict_probas* is set to **False**, a majority vote is taken between each model (in which case
+*ton_n* in **config.yaml** defaults to one).
 
 ### How can I see information about my models or requests on a dashboard?
 

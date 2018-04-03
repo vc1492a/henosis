@@ -11,15 +11,24 @@ and integrated across different enterprise applications.
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 Henosis is in **active development** and is released as alpha software.
+Henosis is being developed at the [NASA Jet Propulsion Laboratory](https://jpl.nasa.gov/) (JPL)
+using user-driven development (UDD) with generous support from the Office of Safety and
+Mission Success (5X).
 
 ## How Does Henosis Work?
+
+Henosis provides recommendations to users of applications, like so:
+
+![PRS Demo Gif](https://i.imgur.com/5mzhJzm.gif)
 
 Henosis works by acting as a bridge between end users and data scientists
 which train recommendation (predictive) models. There are several classes
 that facilitate the interaction between data, scikit-learn models, and a
 REST API that provides recommendations and other information.
 
-![Henosis Flowchart](https://i.imgur.com/EXUh0cx.png)
+<img src="https://i.imgur.com/EXUh0cx.png" style="max-width: 650px;"/>
+
+<!-- ![Henosis Flowchart](https://i.imgur.com/EXUh0cx.png) -->
 
 Henosis classes (bold borders) interface with the data scientist or statistician,
 developers querying for recommendations, and trained models. When queried for
@@ -110,8 +119,3 @@ the California Institute of Technology.
     - [Kyle Hundman](https://github.com/khundman)
     - [Paul Ramirez](https://github.com/darth-pr)
 
-## Far-out Ideas
-- parent / sibling models
-- support of numpy arrays (no pandas)
-- keras support
-- collaborative filtering
