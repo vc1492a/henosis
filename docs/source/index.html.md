@@ -12,27 +12,8 @@ search: true
 
 ## Introduction
 
-Henosis is a cloud-native, lightweight Python-based recommender framework that brings together model training and testing,
-storage and deployment, and querying under a single framework (Henosis is a classical Greek word for “unity”). Henosis provides Data Scientists with a straight-forward and
-generalizable environment in which to train, test, store, and deploy categorical machine
-learning models for making form field recommendations, while also providing software engineers
-and web developers with a REST API that can be easily queried for recommendations
-and integrated across different enterprise applications.
-This user-driven design and simplification of the integration process allows for
-easier deployment of recommender system capability across different enterprise
-applications.
-
-[![PyPi](https://img.shields.io/badge/pypi-0.0.6-green.svg)](https://pypi.python.org/pypi/Henosis/0.0.6)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-
-Henosis is in **active development** and is released as alpha software.
-Henosis is being developed at the [NASA Jet Propulsion Laboratory](https://jpl.nasa.gov/) (JPL)
-using user-driven development (UDD) with generous support from the Office of Safety and
-Mission Success (5X).
-
-## How Does Henosis Work?
-
-Henosis provides recommendations to users of applications, like so:
+Henosis is a cloud-native, lightweight Python-based recommender framework
+that facilitates providing recommendations to users of applications, like this:
 
 <br/>
 
@@ -40,8 +21,103 @@ Henosis provides recommendations to users of applications, like so:
 
 <br/>
 
-Henosis works by acting as a bridge between end users and data scientists
-which train predictive models used in making recommendations. There are several classes
+Henosis is in **active development** and is released as alpha software.
+Henosis is being developed at the [NASA Jet Propulsion Laboratory](https://jpl.nasa.gov/) (JPL)
+using user-driven development (UDD) with generous support from the Office of Safety and
+Mission Success (5X).
+
+[![PyPi](https://img.shields.io/badge/pypi-0.0.7-green.svg)](https://pypi.python.org/pypi/Henosis/0.0.7)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
+## How Does Henosis Work?
+
+This framework brings together model training and testing,
+storage and deployment, and querying under one framework that data
+scientists and developers can collectively use to provide
+recommendations to users. Henosis provides data scientists with a straight-forward interface in
+which to train, test, store, and deploy categorical machine learning
+models. For developers, it provides an API that can be used
+to provide form field recommendations to users of enterprise
+applications.
+
+### For Data Scientists
+
+Henosis is intended to work well with data scientists' modeling workflow,
+and can be used to create training and test splits, fit models, and deploy
+models to a running Henosis instance (see example).
+
+> For Data Scientists
+
+```python
+from Henosis.model import Data, Models
+
+# read in data from a csv
+d = Data()
+d.load(csv_path='file.csv')
+print(d.all.head())
+
+# split data
+d.test_train_split(
+    d.all[X_vars],
+    d.all[y_var],
+    share_train=0.8
+)
+
+# fit a model (use any categorical scikit-learn model)
+# this is where you do your "magic"!
+m = Models().SKModel(MultinomialNB(alpha=0.25))
+m.train(d)
+m.test(d)
+
+# print results
+print(m.train_results)
+print(m.test_results)
+
+# connect to the deployed Henosis instance by referencing a configuration file
+from Henosis.utils import Connect
+s = Connect().config(config_yaml_path='config.yaml')
+
+# store the model in S3 and Elasticsearch
+m.store(
+    server_config=s,
+    model_path='model_' + y_var + '_1.pickle',
+    encoder_path='encoder_' + y_var + '_1.pickle',
+    encoder=count_vect
+)
+
+# deploy a model for use
+m.deploy(
+    server_config=s,
+    deploy=True
+)
+```
+
+More detailed information and examples are available in the rest of the documentation.
+
+### For Developers
+
+Running a Henosis instance for serving recommendations requires first setting
+up an Elasticsearch index (details in the configuration section) and an
+Amazon S3 bucket. Following that, deploying an instance of Henosis for
+making recommendations is as easy as placing the following in a Python file (see example).
+
+> For Developers
+
+```python
+from Henosis.server import Server
+
+# run the server
+s = Server().config(config_yaml_path='config.yaml')
+s.run()
+```
+
+Once a Henosis instance is running, developers can query for recommendations,
+model information, and API request information from the available Henosis API (REST)
+endpoints.
+
+### The Internal Structure
+
+There are several classes
 that facilitate the interaction between data, scikit-learn models, and a
 REST API that provides recommendations and other information.
 
@@ -55,7 +131,7 @@ REST API that provides recommendations and other information.
 <br/>
 <br/>
 
-Henosis classes (bold borders above) interface with the data scientist or statistician,
+Henosis classes (bold borders) interface with the data scientist or statistician,
 developers querying for recommendations, and trained models. When queried for
 recommendations, Henosis references model information in Elasticsearch,
 loads appropriate models from AWS S3, and serves recommendations by using
@@ -77,7 +153,6 @@ data available in the query (REST API request).
     - gevent
     - numpy
     - pandas
-    - pymssql
     - PyYAML
     - requests
     - scikit-learn
@@ -104,19 +179,19 @@ draw valuable time away from mission staff to the annotation of internal forms�
 better spent with spacecraft operations and mission work. A solution was needed that
 would reduce the time needed to file reports in PRS while ensuring ease of use for
 users already familiar with the current PRS system, such as a recommendation system
-for form fields. What we needed from a data science and IT operations perspective
+for form fields. What was needed from a data science and IT operations perspective
 was a straightforward process to deploy a simple recommendation system for use in
 enterprise applications containing categorical form inputs (like dropdown menus).
 
-While the initial effort focused on one internal use case, Henosis was developed
-as a generalized, open-source framework and is freely available for use in
-other applications.
+While the initial effort focused on a single internal use case, Henosis was developed
+as a generalized, open-source framework; it is freely available for use and easy to use
+in many different use cases.
 
 # Configuration
 
-Henosis is largely configured using a locally stored **config.yaml** file. This configuration
+Henosis is configured using a locally stored **config.yaml** file. This configuration
 file contains parameters associated with Henosis API configuration, AWS S3 bucket
-specification, Elasticsearch configuration, and Henosis model deployment settings,
+specification, Elasticsearch configuration and Henosis model deployment settings,
 and is referenced when storing and deploying models as well as
 when deploying a Henosis instance for use in testing or production.
 
@@ -158,6 +233,7 @@ api:
 # Models
 models:
   preload_pickles: True
+  refresh_pickles: 1440 # in minutes
   predict_probabilities: True
   top_n: 3
 
@@ -181,10 +257,9 @@ used or available from Henosis. A few notes on some of the specifications:
     - secret: your AWS S3 secret.
 - api
     - host: the internal host used by Henosis to provide information through its own API.
-    *Must be the same as the port used starting a Henosis instance.*
     - index: the name of your API following the host. *Default parameters recommended.*
     - version: the version of your API.
-    - missing: this is the key that tells Henosis whether or not a form field needs a recommendation.
+    - missing: this is the key that informs Henosis whether or not a form field needs a recommendation.
     This value is passed to Henosis in requests for recommendations.
     - session_expiration: defines how long a session lasts when a user starts a new session
     (series of requests), in minutes.
@@ -193,6 +268,7 @@ used or available from Henosis. A few notes on some of the specifications:
 - models
     - preload_pickles: tells Henosis to store models in S3 in application memory versus
     pulling from S3 for each request. Defaults to True, highly recommended.
+    - refresh_pickles: The number of minutes between refreshing models in memory if not set to None and *preload_pickles* set to True.
     - predict_probabilities: if True, uses bagging to average model probabilities for each class.
     Else, provides the majority vote.
     - top_n: the number of recommendations to provide for each form field (defaults to 1 if
@@ -205,10 +281,11 @@ Henosis utilizes Elasticsearch to identify which models are available for use,
 when models have the appropriate data for making recommendations, and to
 keep track of models as they are used to make recommendations for users.
 Additionally, a separate Elasticsearch index is used to keep track of requests
-made to the Henosis API.
+made to the Henosis API which can be used to track system and user behavior.
 
-These indices **must** first be created and mapped before storing and deploying
-models in Henosis and prior to running a Henosis instance.
+The Elasticsearch indices that store this information **must** first be
+created and mapped before storing and deploying models in Henosis and
+prior to running a Henosis instance.
 
 > Create the Models Index
 
@@ -288,7 +365,7 @@ curl -XPUT '<your_host>/model/_mapping/model' -H 'Content-Type: application/json
       "testTime": {
         "type": "float"
       },
-      "threshold": {
+      "recommendationThreshold": {
         "type": "float"
       },
       "deployed": {
@@ -379,7 +456,7 @@ curl -XPUT '<your_host>/requestlog/_mapping/requestlog' -H 'Content-Type: applic
 
 # Modeling
 
-Henosis is developed using user-driven-development (UDD), and is intended to
+Henosis is being developed using user-driven-development (UDD), and is intended to
 work easily in a data scientist or statistician's workflow.
 Two classes, *Data* and *Models*, are used to work with your data and
 scikit-learn models that form the basis of the form recommendation system.
@@ -407,7 +484,8 @@ can be called after loading the *Data* class as an object.
 > Load Data
 
 ```python
-d = henosis.Data()
+from Henosis.model import Data
+d = Data()
 d.load(csv_path='data.csv')
 # d.all is a Pandas DataFrame
 print(d.all.columns.values)
@@ -481,7 +559,8 @@ does not support regression models or collaborative filtering at this time.
 Additionally, it is necessary to ensure that variable names are *identical*
 between models (training data) and the form data sent in each request. This
 is how Henosis identifies when the data necessary to make a recommendation
-is available for each model.
+is available for each model (e.g. if your variable is named 'projectName' when
+training your model, send the form field for project name as 'projectName' in the API request).
 
 ### Defining Models
 
@@ -492,7 +571,8 @@ scikit-learn model into the SKModel class.
 > Define Model
 
 ```python
-m = henosis.Models().SKModel(MultinomialNB(alpha=1e-10))
+from Henosis.model import Models
+m = Models().SKModel(MultinomialNB(alpha=1e-10))
 ```
 
 The SKModel object has the following attributes:
@@ -555,8 +635,9 @@ data provided in the request for recommendations, creating new features
 from incoming data for use in the available models. For example, a
 form may contain raw text that can be used to make predictions for a
 particular form field, but this raw text may need to be processed before
-use in the models. This functionality can be used to generate new features
-from the data provided in the recommendation request itself.
+use in the models. The feature tagging functionality can be used to
+generate new features from the data provided in the recommendation
+request itself by associating a Python function with a particular field.
 
 > Define a Function for Generating a New Feature
 
@@ -586,7 +667,7 @@ def clean_text(s):
     return s
 ```
 
-> Tag that Function for a Model
+> Tag that Function for a Field and Tie to a Model
 
 ```python
 m.tag_generator(clean_text, 'cleanText', ['title'])
@@ -594,13 +675,14 @@ print(m.independent) # to ensure new feature is present
 ```
 
 After tagging feature generators, Henosis will process incoming data used to
-generate new features using the function in the tag, adds that new
-field to the data used to provide recommendations. This process must be
-repeated for each model which uses features generated from the incoming data.
+generate new features using the function in the tag and adds that new
+field to the data used to provide recommendations. .
 
 **Note:** If using external libraries in your feature generation, this must
 be defined as an import *within the function*. In addition, the deployed
-Henosis instance must also have the library installed on that machine.
+Henosis instance must also have the libraries used in any tagged features (functions)
+installed on that machine to function properly. This process must be
+repeated for each model which uses features generated from the incoming data.
 
 ### Store
 
@@ -616,8 +698,9 @@ the model can be stored by referencing this configuration.
 > Store Model
 
 ```python
-# NOTE: if this is your first time loading the config yaml, set preload pickles to False
-s = henosis.Server().config(yaml_path='config.yaml') # may need to be absolute path
+# NOTE: if this is your first time loading the config yaml, set preload pickles to False in the config file
+from Henosis.utils import Connect
+s = Connect().config(config_yaml_path='config.yaml') # may need to be absolute path
 ```
 
 ```python
@@ -626,7 +709,7 @@ m.store(
     model_path='model_variableOne_1.pickle', # make sure not to overwrite an old file
     encoder_path='encoder_variableOne_1.pickle', # make sure not to overwrite an old file
     encoder=count_vect, # only needed for CountVectorizer and TfidfVectorizer data
-    override=True # to overwrite old AWS S3 files
+    override=True # to overwrite old AWS S3 files. Does not overwrite previous Elasticsearch entries.
 )
 ```
 
@@ -644,11 +727,18 @@ as part of the model storage process.
 ```python
 m.deploy(
     server_config=s,
-    deploy=True
+    deploy=True,
+    recommendation_threshold=0.1
 )
 ```
 
-To take a model offline, simply do the same with *deploy=False*.
+The *recommendation_threshold* parameter is an optional parameter which
+dictates the minimum confidence needed for a model's recommendations to
+be used in providing recommendations to users. For example, if set to
+0.1, recommendations from the model will only be provided if the maximum
+class probability in the *top_n* predictions exceeds that threshold. To
+take a model offline, simply call the same function as above
+with *deploy=False* instead.
 
 # Deployment
 
@@ -676,7 +766,8 @@ models.
 > Load Config
 
 ```python
-s = henosis.Server().config(yaml_path='config.yaml') # may need to be absolute path
+from Henosis.server import Server
+s = Server().config(config_yaml_path='config.yaml', server=True) # may need to be absolute path, set server to True
 ```
 
 ### Run
@@ -707,7 +798,7 @@ For example, user demographics and past behavioral information are often useful 
 making recommendations, but this information may not be available in the form itself.
 By passing the custom template with a *Flask-RESTful* resource, that resource can
 be used to query for user demographics and pass this information to the recommendations
-route in Henosis for obtaining recommendations.
+route in Henosis for obtaining recommendations in any tagged features (functions).
 
 ```python
 from flask_restful import Resource
@@ -734,7 +825,7 @@ custom_routes = [
     }
 ]
 
-s = henosis.Server().config(yaml_path='config.yaml') # may need absolute path
+s = Server().config(config_yaml_path='config.yaml', server=True) # may need to be absolute path, set server to True
 s.run(routes=custom_routes, api_resources=custom_endpoints)
 ```
 
@@ -748,7 +839,7 @@ analysis.
 
 ## Authentication
 
-Henosis currently supports simple authentication. API authentication is set
+Henosis supports simple authentication. API authentication is set
 by the Henosis administrator, and is specified in the system **config.yaml**. If
 using authentication, please pass your authentication credentials as part of
 each individual request.
@@ -778,14 +869,16 @@ the available data is insufficient for making a recommendation using
 the models deployed in the Henosis instance, recommendations may
 not be returned from your request. Only once all data needed to make
 a recommendation is available for a particular model is a recommendation
-provided.
+from that model provided.
 
 There's just a few things to keep in mind:
 
 - Make sure to pass fields that need recommendations using the missing
 tag specified in **config.yaml**.
 - Make sure to pass field names in the same format as they are specified
-in the models, including capitalization.
+in the models, including capitalization (e.g. if the variable project name
+was defined as 'projectName' when training, reference that variable as 'projectName'
+in your request).
 
 > In Python:
 
@@ -889,7 +982,6 @@ curl -XGET "https://<username>:<password>@<your_host>/api/<your_api_version>/mod
                 "deployed": true,
                 "encoderPath": "encoder_variableTwo_1.pickle",
                 "encoderType": "CountVectorizer",
-                "f1_threshold": 0.85,
                 "id": "bb9e7a91c256412ca40f57e27e8e90b6",
                 "independent": [
                     {
@@ -904,6 +996,7 @@ curl -XGET "https://<username>:<password>@<your_host>/api/<your_api_version>/mod
                 "lastTrainedDate": "2018-01-18T08:29:08",
                 "modelPath": "model_variableTwo_1.pickle",
                 "modelType": "OneVsRestClassifier(estimator=MultinomialNB(alpha=0.001, class_prior=None, fit_prior=True),\n          n_jobs=1)",
+                "recommendationThreshold": 0.2,
                 "testAccuracy": 0.9019607843137255,
                 "testF1": 0.9008452056839288,
                 "testPrecision": 0.9044056750340173,
@@ -928,7 +1021,6 @@ curl -XGET "https://<username>:<password>@<your_host>/api/<your_api_version>/mod
                 "deployed": true,
                 "encoderPath": "encoder_variableOne_1.pickle",
                 "encoderType": "CountVectorizer",
-                "f1_threshold": 0.85,
                 "id": "2a53966c460340f89e72c4f65e238427",
                 "independent": [
                     {
@@ -943,6 +1035,7 @@ curl -XGET "https://<username>:<password>@<your_host>/api/<your_api_version>/mod
                 "lastTrainedDate": "2018-01-18T08:28:28",
                 "modelPath": "model_variableOne_1.pickle",
                 "modelType": "OneVsRestClassifier(estimator=MultinomialNB(alpha=0.001, class_prior=None, fit_prior=True),\n          n_jobs=1)",
+                "recommendationThreshold": 0.2,
                 "testAccuracy": 0.9707006369426752,
                 "testF1": 0.9686514941659194,
                 "testPrecision": 0.9677349203607892,
@@ -1109,10 +1202,10 @@ included in the **scripts** directory on Github.
 ### How does Henosis aggregate predictions from different models for a single field?
 
 Henosis uses an ensemble method called *bagging* to aggregate predictions when more than one
-model is deployed to provide recommendations for a particular field, as long as each model must be trained
+model provides a recommendation for a particular field, provided each model is trained
 separately on unique training data and *predict_probas* is set to **True** in **config.yaml**.
-If *predict_probas* is set to **False**, a majority vote is taken between each model (in which case
-*ton_n* in **config.yaml** defaults to one).
+Else, a simple majority vote is taken between each model. In the case when a
+majority vote is used, *top_n* defaults to **one**.
 
 ### How can I see information about my models or requests on a dashboard?
 
@@ -1123,7 +1216,28 @@ view high-level information about the models or requests being made to a deploye
 Henosis instance. This is accomplished by specifying an index pattern and then
 creating visualizations and dashboards.
 
+### What is the development approach used for Henosis?
+
+Henosis is developed using user-driven design (UDD), with development focused
+on functionality but also on the ease in which Henosis can be integrated
+and used in a data scientist's or software developer's workflow.
+
 ### How can I get involved in development?
 
 Henosis is an open source project! As such, feel free to fork the Github
 repository and make pull requests for new features, open issues, or other changes.
+
+### Why in the world is it called Henosis, and what does that mean?
+
+Have you ever seen *My Big Fat Greek Wedding?* Well, in writing out the
+answer to this question, I ([Valentino](https://www.valentino.io))
+realized I may be just like the dad that can tie
+any word to its ancient Greek root. You see, I'm Greek in heritage and was
+born on the island of Cyprus. Naturally I started looking for ancient Greek
+words that could characterize this work. Turns out, the word henosis is an ancient
+Greek word for *unity*. "You see? There you go!".
+
+![Greeks](https://i.imgur.com/hrbpxGd.gif)
+
+Real reasons? It's a distinctive name and easy to search for online. Plus, the
+meaning is fitting as Henosis attempts to bring disparate things together like glue.

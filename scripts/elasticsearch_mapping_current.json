@@ -60,7 +60,7 @@
       "testTime": {
         "type": "float"
       },
-      "threshold": {
+      "recommendationThreshold": {
         "type": "float"
       },
       "deployed": {
@@ -83,7 +83,7 @@
       },
       "encoderType": {
         "type": "text"
-      }
+      },
     }
   },
   "requestlog": {

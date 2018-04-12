@@ -61,7 +61,7 @@ curl -XPUT '<your_host>/model/_mapping/model' -H 'Content-Type: application/json
       "testTime": {
         "type": "float"
       },
-      "threshold": {
+      "recommendationThreshold": {
         "type": "float"
       },
       "deployed": {
