@@ -5,7 +5,7 @@ that facilitates providing recommendations to users of applications, like this:
 
 <br/>
 
-![PRS Demo Gif](https://i.imgur.com/5mzhJzm.gif)
+![PRS Demo Gif](https://i.imgur.com/5mzhJzm.gif | width=600)
 
 <br/>
 
