@@ -34,14 +34,14 @@ import sys
 import threading
 import time
 
-from model import Models
-from utils import Connect, _ElasticSearch, _SessionManager
+from Henosis.model import Models
+from Henosis.utils import Connect, _ElasticSearch, _SessionManager
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 queue = None
 
 __author__ = 'Valentino Constantinou'
-__version__ = '0.0.7'
+__version__ = '0.0.8'
 __license__ = 'Apache License, Version 2.0'
 
 

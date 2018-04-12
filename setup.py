@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
     name='Henosis',
     packages=['Henosis'],
-    version='0.0.7',
+    version='0.0.8',
     description='A Python framework for deploying recommendation models for form fields.',
     author='Valentino Constantinou',
     author_email='vc@valentino.io',

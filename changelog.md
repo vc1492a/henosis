@@ -4,6 +4,10 @@ All notable changes to Henosis will be documented in this Changelog.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## 0.0.8 - 2018-04-12
+### Fixed
+- An issue with relative imports across Henosis files, changed to absolute imports.
+
 ## 0.0.7 - 2018-04-12
 ### Added
 - Added the ability to set a minimum confidence threshold that dictates when

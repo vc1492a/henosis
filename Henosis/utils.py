@@ -25,7 +25,7 @@ import yaml
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 __author__ = 'Valentino Constantinou'
-__version__ = '0.0.7'
+__version__ = '0.0.8'
 __license__ = 'Apache License, Version 2.0'
 
 
