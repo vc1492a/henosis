@@ -4,6 +4,27 @@ All notable changes to Henosis will be documented in this Changelog.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## 0.0.10 - 2018-04-27
+### Fixed
+- A small unintended KeyError introduced when logging requests after the 0.0.9 update.
+
+## 0.0.9 - 2018-04-27
+### Added
+- A check that creates a temporary directory needed when storing models or
+tagging functions.
+- Additional fields for the response from the /requestlog API endpoint,
+providing a "modelsUsed" field and a "modelsWithheld" field. When *predict_probabilities*
+is set to True in your configuration file, these fields provide context behind how
+frequently models meet their minimum recommendation (confidence) threshold.
+- Additional checks for errors in making predictions.
+
+### Changed
+- The default model field return when requesting the API for recommendations. Changed
+from *modelsQueried* to *modelsUsed*.
+
+### Fixed
+- A deprecation warning related to the WSGI import from gevent.
+
 ## 0.0.8 - 2018-04-12
 ### Fixed
 - An issue with relative imports across Henosis files, changed to absolute imports.
@@ -20,7 +41,6 @@ instance's configuration file.
 if *preload_pickles* is set to True. This ensures no error is encountered if a model
 has been deployed but isn't yet in the *pickle_jar*.
 - Included additional logging for improved system monitoring and debugging.
-- Removed pymssql requirement and functionality.
 
 ### Changed
 - Restructured Henosis such that server deployment and modeling classes are separated
@@ -30,6 +50,9 @@ allows for easier use of Henosis by users and for better code maintainability.
 
 ### Fixed
 - An issue that was causing an error when using scikit-learn's TfidfVectorizer.
+
+### Removed
+- Removed pymssql requirement and functionality.
 
 ## 0.0.6 - 2018-03-15
 ### Fixed

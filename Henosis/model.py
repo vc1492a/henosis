@@ -30,7 +30,7 @@ from Henosis.utils import _ElasticSearch
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 __author__ = 'Valentino Constantinou'
-__version__ = '0.0.8'
+__version__ = '0.0.10'
 __license__ = 'Apache License, Version 2.0'
 
 
@@ -101,6 +101,11 @@ class Models(object):
             for i in model.independent:
                 if 'generator_path' in i.keys():
                     self._check_path(i['generator_path'])
+
+        # create tmp directory if not present
+        if not os.path.exists('tmp/'):
+            os.makedirs('tmp/')
+            logging.info('Created directory tmp to store model.')
 
         with open('tmp/' + model_path, 'wb') as m:
             model.model_path = model_path
@@ -337,6 +342,10 @@ class Models(object):
                 if i['name'] == output_var:
                     i['inputs'] = input_vars
                     i['generator_path'] = generator_path
+            # create tmp directory if not present
+            if not os.path.exists('tmp/'):
+                os.makedirs('tmp/')
+                logging.info('Created directory tmp to tag generator.')
             with open('tmp/' + generator_path, 'wb') as g:
                 dill.dump(func, g, protocol=dill.HIGHEST_PROTOCOL)
             logging.info('Generator tagged successfully.')

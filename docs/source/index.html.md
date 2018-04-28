@@ -26,7 +26,7 @@ Henosis is being developed at the [NASA Jet Propulsion Laboratory](https://jpl.n
 using user-driven development (UDD) with generous support from the Office of Safety and
 Mission Success (5X).
 
-[![PyPi](https://img.shields.io/badge/pypi-0.0.8-green.svg)](https://pypi.python.org/pypi/Henosis/0.0.8)
+[![PyPi](https://img.shields.io/badge/pypi-0.0.10-green.svg)](https://pypi.python.org/pypi/Henosis/0.0.10)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 ## How Does Henosis Work?
@@ -304,16 +304,16 @@ curl -XPUT '<your_host>/model' -H 'Content-Type: application/json' -d '{
 
 ```shell
 curl -XPUT '<your_host>/model/_mapping/model' -H 'Content-Type: application/json' -d '{
-  "model": {
+    "model": {
     "properties": {
       "dependent": {
-        "type": "text"
+        "type": "keyword"
       },
       "independent": {
         "type": "nested",
         "properties": {
           "name": {
-            "type": "text"
+            "type": "keyword"
           },
           "inputs": {
             "type": "text"
@@ -354,7 +354,7 @@ curl -XPUT '<your_host>/model/_mapping/model' -H 'Content-Type: application/json
         "type": "float"
       },
       "testPrecision": {
-        "type": "text"
+        "type": "float"
       },
       "testAccuracy": {
         "type": "float"
@@ -388,7 +388,7 @@ curl -XPUT '<your_host>/model/_mapping/model' -H 'Content-Type: application/json
       },
       "encoderType": {
         "type": "text"
-      }
+      },
     }
   }
 }'
@@ -411,10 +411,10 @@ curl -XPUT '<your_host>/requestlog' -H 'Content-Type: application/json' -d '{
 
 ```shell
 curl -XPUT '<your_host>/requestlog/_mapping/requestlog' -H 'Content-Type: application/json' -d '{
-  "requestlog": {
+    "requestlog": {
     "properties": {
       "sessionId": {
-        "type": "text"
+        "type": "keyword"
       },
       "sessionExpireDate": {
         "type": "date"
@@ -429,18 +429,24 @@ curl -XPUT '<your_host>/requestlog/_mapping/requestlog' -H 'Content-Type: applic
         "type": "float"
       },
       "missingFields": {
-        "type": "text"
+        "type": "keyword"
       },
       "recommendations": {
         "type": "nested",
         "properties": {
           "fieldName": {
-            "type": "text"
+            "type": "keyword"
           }
         }
       },
       "modelsQueried": {
-        "type": "text"
+        "type": "keyword"
+      },
+      "modelsUsed": {
+        "type": "keyword"
+      },
+      "modelsWithheld": {
+        "type": "keyword"
       },
       "responseStatusCode": {
         "type": "integer"
@@ -911,17 +917,20 @@ curl -XGET "https://<username>:<password>@<your_host>/api/<your_api_version>/rec
   'variableTwo': 'Spaceman',
   'variableThree': '999999',
 }
-
 ```
 
 > And receive something like this in return:
 
 ```json
+
 {
-  "variableOne": "Proton Beam",
-  "variableTwo": "Spaceman",
-  "variableThree": "Liquid Nitrogen Resistant Gloves",
-}
+   'predictions': {
+      "variableOne": "Proton Beam",
+      "variableTwo": "Spaceman",
+      "variableThree": "Liquid Nitrogen Resistant Gloves",
+    },
+   'modelsUsed': self.models_used,
+   'description': 'Model ids and form field predictions from used models.'
 ```
 
 ### HTTP Request
@@ -1120,21 +1129,6 @@ curl -XGET "https://<username>:<password>@<your_host>/api/<your_api_version>/req
                         "projectTwo",
                         "projectThree"
                     ],
-                    "specificEnvironment": [
-                        "specificEnvironmentOne",
-                        "specificEnvironmentTwo",
-                        "specificEnvironmentThree"
-                    ],
-                    "problemFailureNotedDuring": [
-                        "inspection",
-                        "testing",
-                        "flight"
-                    ],
-                    "problemType": [
-                        "engineering",
-                        "testing",
-                        "design"
-                    ],
                     "suspectedProblemArea": [
                         "hardware",
                         "software",
@@ -1148,13 +1142,9 @@ curl -XGET "https://<username>:<password>@<your_host>/api/<your_api_version>/req
                     "problemType",
                     "suspectedProblemArea"
                 ],
-                "modelsQueried": [
-                    "be4d26d624a6408abd105b015e0526b3",
-                    "b1889ca0646b46fabbfac28127a97d8a",
+                "modelsUsed": [
                     "d440285ac22a4528b5df23ca72c86065",
-                    "658f5e1310cf42f9a62eed1028179bec",
-                    "7e7298f649ae4540aa2c1fba2e014a81",
-                    "897ffab10a26446288560260027ddfff"
+                    "658f5e1310cf42f9a62eed1028179bec"
                 ]
             }
         }
@@ -1201,11 +1191,13 @@ included in the **scripts** directory on Github.
 
 ### How does Henosis aggregate predictions from different models for a single field?
 
-Henosis uses an ensemble method called *bagging* to aggregate predictions when more than one
-model provides a recommendation for a particular field, provided each model is trained
-separately on unique training data and *predict_probas* is set to **True** in **config.yaml**.
-Else, a simple majority vote is taken between each model. In the case when a
-majority vote is used, *top_n* defaults to **one**.
+Henosis averages predicted probabilities from each model for each class of a dependent
+variable when ranking and providing recommendations to users. This capability can
+be further extended to employ *bagging* (also called bootstrap aggregation) if
+using training the same model across separate, randomly sampled datasets.
+*predict_probas* should be set to **True** in **config.yaml** for bagging,
+otherwise a simple majority vote is taken between each model (in the case when a
+majority vote is used, *top_n* also defaults to **one**).
 
 ### How can I see information about my models or requests on a dashboard?
 

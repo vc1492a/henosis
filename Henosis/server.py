@@ -19,7 +19,7 @@ from flask import Flask, make_response, render_template
 from flask_cors import CORS
 from flask_restful import Api, reqparse, request, Resource
 from functools import wraps
-from gevent.wsgi import WSGIServer
+from gevent.pywsgi import WSGIServer
 import itertools
 import json
 import logging
@@ -41,7 +41,7 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 queue = None
 
 __author__ = 'Valentino Constantinou'
-__version__ = '0.0.8'
+__version__ = '0.0.10'
 __license__ = 'Apache License, Version 2.0'
 
 
@@ -239,6 +239,8 @@ class _FormProcessor(object):
         self.predict_probabilities = server_config.sys_config.models_predict_probabilities
         self.top_n = server_config.sys_config.models_top_n
         self.models_queried = []
+        self.models_used = []
+        self.models_withheld = []
         self.text_vectorizers = ['CountVectorizer', 'TfidfVectorizer']
 
     @staticmethod
@@ -307,11 +309,12 @@ class _FormProcessor(object):
             return True
         return False
 
-    def predict_proba(self, model, input_data, k, recommendation_threshold):
+    def predict_proba(self, model, model_id, input_data, k, recommendation_threshold):
         # make the prediction
         p = model.predict_proba(input_data)
         # check for recommendationThreshold compliance
         if self.threshold_proba(p, recommendation_threshold) is True:
+            self.models_used.append(model_id)
             # organize the probabilities
             probas = {}
             for p, c in zip(p[0], model.classes_):
@@ -351,10 +354,10 @@ class _FormProcessor(object):
             for key, value in top_n_slice:
                 self.predictions[k].append(key)
 
-    def predict(self, model, input_data, k, recommendation_threshold):
+    def predict(self, model, model_id, input_data, k, recommendation_threshold):
         # make predictions based on config
         if self.predict_probabilities:
-            self.predict_proba(model, input_data, k, recommendation_threshold)
+            self.predict_proba(model, model_id, input_data, k, recommendation_threshold)
         else:
             self.predict_majority(model, input_data, k)
 
@@ -366,54 +369,83 @@ class _FormProcessor(object):
             independent_vars = []
             for i in m['_source']['independent']:
                 independent_vars.append(i['name'])
-                gen_vals = self.generator_check(form_data, i)
-                if gen_vals is not None:
-                    form_data[i['name']] = gen_vals
+                try:
+                    gen_vals = self.generator_check(form_data, i)
+                    if gen_vals is not None:
+                        form_data[i['name']] = gen_vals
+                except Exception as e:
+                    logging.warning(e)
+                    logging.warning('Error checking for tagged functions.')
+                    return False, e
             # ensure form field is missing and that an appropriate model is available and deployed for use
             if self.conditions_met(m['_source']['modelPath'], m['_source']['deployed'], form_data, k, m['_source']['dependent'], independent_vars):
                 self.missing_fields.append(k)
                 # process the input data, ensure order
-                input_data = pd.DataFrame(
-                    [[form_data[k] for k in independent_vars]],
-                    columns=independent_vars
-                )
-                input_data = self.load_vectorizer(input_data, m['_source']['encoderType'], m['_source']['encoderPath'])
+                try:
+                    input_data = pd.DataFrame(
+                        [[form_data[k] for k in independent_vars]],
+                        columns=independent_vars
+                    )
+                except Exception as e:
+                    logging.warning(e)
+                    logging.warning('Error when creating dataframe from request data.')
+                    return False, e
+                try:
+                    input_data = self.load_vectorizer(input_data, m['_source']['encoderType'], m['_source']['encoderPath'])
+                except Exception as e:
+                    logging.warning(e)
+                    logging.warning('Error loading vectorizer.')
+                    return False, e
                 # load the estimator
-                pred_m = self.model_functions._load(m['_source']['modelPath'])
+                try:
+                    pred_m = self.model_functions._load(m['_source']['modelPath'])
+                except Exception as e:
+                    logging.warning(e)
+                    logging.warning('Error loading model.')
+                    return False, e
                 # make predictions
-                self.predict(pred_m, input_data, k, m['_source']['recommendationThreshold'])
+                try:
+                    self.predict(pred_m, m['_id'], input_data, k, m['_source']['recommendationThreshold'])
+                except Exception as e:
+                    logging.warning(e)
+                    logging.warning('Error when making predictions.')
+                    return False, e
                 # add to the callCount, lastCall and update
                 m['_source']['callCount'] += 1
                 m['_source']['lastCall'] = datetime.datetime.fromtimestamp(time.time()).strftime(
                     '%Y-%m-%dT%H:%M:%S')
                 self.models_queried.append(m['_id'])
+                if self.predict_probabilities is False:
+                    self.models_used.append(m['_id'])
+                self.models_withheld = np.setdiff1d(self.models_queried, self.models_used)
                 self.index.update(update_dict=m['_source'])
         if self.predict_probabilities:
             self.sort_proba()
         else:
             self.sort_votes()
 
+        return True, None
+
     def get_recommendations(self, form_data):
+        # retrieve any deployed models from the index
         try:
-            # retrieve any deployed models from the index
             response = self.index.get(deployed=True)
             models = response[0]['models']
-            # self.index.models_last_refresh = response[0]['models_last_refresh']
-            # print(self.index.models_last_refresh)
         except Exception as e:
             logging.warning(e)
-            return {'description': 'Error retrieving models from Elasticsearch.'}, 400
-
+            return {'description': 'Error retrieving models from Elasticsearch.', 'exception': e}, 400
         try:
-            self.process_form(form_data, models)
-            return {
-                       'predictions': self.predictions,
-                       'modelsQueried': self.models_queried,
-                       'description': 'Model ids and form field predictions provided by the available models.'
-                   }, 200
+            success, exception = self.process_form(form_data, models)
+            if success is False:
+                return {'description': 'Error processing models and their predictions.', 'exception': exception}, 400
         except Exception as e:
             logging.warning(e)
-            return {'description': 'Error processing models and their predictions.'}, 400
+            return {'description': 'Error processing models and their predictions.', 'exception': e}, 400
+        return {
+                   'predictions': self.predictions,
+                   'modelsUsed': self.models_used,
+                   'description': 'Model ids and form field predictions from used models.'
+               }, 200
 
 
 class ServerThread(threading.Thread):
@@ -421,7 +453,7 @@ class ServerThread(threading.Thread):
     def __init__(self, app, port=5005):
         self.port = port
         threading.Thread.__init__(self)
-        self.srv = WSGIServer(("", self.port), app)
+        self.srv = WSGIServer(("0.0.0.0", self.port), app)
         self.ctx = app.app_context()
         self.ctx.push()
 

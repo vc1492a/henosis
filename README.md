@@ -14,7 +14,7 @@ Henosis is being developed at the [NASA Jet Propulsion Laboratory](https://jpl.n
 using user-driven development (UDD) with generous support from the Office of Safety and
 Mission Success (5X).
 
-[![PyPi](https://img.shields.io/badge/pypi-0.0.8-green.svg)](https://pypi.python.org/pypi/Henosis/0.0.8)
+[![PyPi](https://img.shields.io/badge/pypi-0.0.10-green.svg)](https://pypi.python.org/pypi/Henosis/0.0.10)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 
@@ -157,10 +157,6 @@ Simply do a pip install and import the Henosis library as follows:
 pip install Henosis
 ```
 
-```python
-from Henosis import henosis
-```
-
 If you'd like, you can also fork the repository and pull Henosis to a local directory.
 
 ## Documentation
@@ -192,6 +188,11 @@ enterprise applications containing categorical form inputs (like dropdown menus)
 While the initial effort focused on one internal use case, Henosis was developed
 as a generalized, open-source framework and is freely available for use in
 other applications.
+
+## How to Contribute
+See a bug that needs fixing or want to add a new feature? Fork the repository with
+the name of the issue (e.g. 'issue_12', open an issue if there isn't one already) or
+the name of your new feature. When ready, submit a pull request!
 
 ## License
 

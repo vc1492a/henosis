@@ -1,15 +1,15 @@
 # add a mapping to the model index
-curl -XPUT '<your_host>/model/_mapping/model' -H 'Content-Type: application/json' -d '{
-  "model": {
+curl -XPUT '<host>/model/_mapping/model' -H 'Content-Type: application/json' -d '{
+    "model": {
     "properties": {
       "dependent": {
-        "type": "text"
+        "type": "keyword"
       },
       "independent": {
         "type": "nested",
         "properties": {
           "name": {
-            "type": "text"
+            "type": "keyword"
           },
           "inputs": {
             "type": "text"
@@ -50,7 +50,7 @@ curl -XPUT '<your_host>/model/_mapping/model' -H 'Content-Type: application/json
         "type": "float"
       },
       "testPrecision": {
-        "type": "text"
+        "type": "float"
       },
       "testAccuracy": {
         "type": "float"

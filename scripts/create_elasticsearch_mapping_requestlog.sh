@@ -1,9 +1,9 @@
 # add a mapping to the model index
-curl -XPUT '<your_host>/requestlog/_mapping/requestlog' -H 'Content-Type: application/json' -d '{
-  "requestlog": {
+curl -XPUT '<host>/requestlog/_mapping/requestlog' -H 'Content-Type: application/json' -d '{
+    "requestlog": {
     "properties": {
       "sessionId": {
-        "type": "text"
+        "type": "keyword"
       },
       "sessionExpireDate": {
         "type": "date"
@@ -18,18 +18,24 @@ curl -XPUT '<your_host>/requestlog/_mapping/requestlog' -H 'Content-Type: applic
         "type": "float"
       },
       "missingFields": {
-        "type": "text"
+        "type": "keyword"
       },
       "recommendations": {
         "type": "nested",
         "properties": {
           "fieldName": {
-            "type": "text"
+            "type": "keyword"
           }
         }
       },
       "modelsQueried": {
-        "type": "text"
+        "type": "keyword"
+      },
+      "modelsUsed": {
+        "type": "keyword"
+      },
+      "modelsWithheld": {
+        "type": "keyword"
       },
       "responseStatusCode": {
         "type": "integer"

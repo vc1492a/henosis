@@ -25,7 +25,7 @@ import yaml
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 __author__ = 'Valentino Constantinou'
-__version__ = '0.0.8'
+__version__ = '0.0.10'
 __license__ = 'Apache License, Version 2.0'
 
 
@@ -248,7 +248,7 @@ class _SessionManager:
             "responseDescription": self.responseDescription,
             "recommendations": r['predictions'],
             "missingFields": list(r['predictions'].keys()),
-            "modelsQueried": r['modelsQueried'],
+            "modelsUsed": r['modelsUsed'],
         }
 
         self.index.store(request_log)
