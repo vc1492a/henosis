@@ -924,13 +924,17 @@ curl -XGET "https://<username>:<password>@<your_host>/api/<your_api_version>/rec
 ```json
 
 {
-   'predictions': {
+   "predictions": {
       "variableOne": "Proton Beam",
       "variableTwo": "Spaceman",
       "variableThree": "Liquid Nitrogen Resistant Gloves",
     },
-   'modelsUsed': self.models_used,
-   'description': 'Model ids and form field predictions from used models.'
+   "modelsUsed": [
+      "d440285ac22a4528b5df23ca72c86065",
+      "658f5e1310cf42f9a62eed1028179bec"
+    ]
+   "description": "Model ids and form field predictions from used models."
+}
 ```
 
 ### HTTP Request
