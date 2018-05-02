@@ -898,7 +898,7 @@ q = {
   'variableThree': '999999',
 }
 
-r = requests.get('https://<your_host>/api/<your_api_version>/recommend', json=q, auth=('username', 'pass'))
+r = requests.get('https://<your_host>/api/<your_api_version>/recommend' + '?formData=' + str(q), auth=('username', 'pass'))
 json.dumps(r.json(), indent=4)
 ```
 
@@ -906,7 +906,7 @@ json.dumps(r.json(), indent=4)
 
 ```shell
 curl -XGET "https://<username>:<password>@<your_host>/api/<your_api_version>/recommend" -d
-  "formData={'variableOne': 999999, 'variableTwo': 'Spaceman', 'variableThree': 999999}"
+  "formData={'variableOne': '999999', 'variableTwo': 'Spaceman', 'variableThree': '999999'}"
 ```
 
 > You may pass something like this:
