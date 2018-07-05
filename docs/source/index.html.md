@@ -26,7 +26,7 @@ Henosis is being developed at the [NASA Jet Propulsion Laboratory](https://jpl.n
 using user-driven development (UDD) with generous support from the Office of Safety and
 Mission Success (5X).
 
-[![PyPi](https://img.shields.io/badge/pypi-0.0.10-green.svg)](https://pypi.python.org/pypi/Henosis/0.0.10)
+[![PyPi](https://img.shields.io/badge/pypi-0.0.11-green.svg)](https://pypi.python.org/pypi/Henosis/0.0.11)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 ## How Does Henosis Work?
@@ -232,6 +232,7 @@ api:
   session_expiration: 10
   user: '<username>'
   pw: '<password>'
+  secret: '<random_api_secret>'
 
 # Models
 models:
