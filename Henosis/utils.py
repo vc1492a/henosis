@@ -25,7 +25,7 @@ import yaml
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 __author__ = 'Valentino Constantinou'
-__version__ = '0.0.10'
+__version__ = '0.0.11'
 __license__ = 'Apache License, Version 2.0'
 
 
@@ -39,12 +39,14 @@ class _LoadConfig:
         self.elasticsearch_index_models = None
         self.elasticsearch_index_requestlog = None
         self.elasticsearch_verify = None
-        self.elasticsearch_auth = None
+        self.elasticsearch_user = None
+        self.elasticsearch_pass = None
         self.api_index = None
         self.api_version = None
         self.api_missing = None
         self.api_session_expiration = None
-        self.api_auth = None
+        self.api_user = None
+        self.api_pass = None
         self.api_secret = None
         self.models_preload_pickles = None
         self.pickle_jar = None
@@ -66,22 +68,32 @@ class _LoadConfig:
 
         with open(self.config_yaml_path, 'r') as c:
             try:
-                config_params = yaml.load(c)
+                config_params = yaml.safe_load(c)
 
                 # None in yaml file is read as string but needs to be converted
-                config_params['elasticsearch']['auth'] = None if config_params['elasticsearch']['auth'] == 'None' else \
-                    config_params['elasticsearch']['auth']
+                config_params['elasticsearch']['user'] = None if config_params['elasticsearch']['user'] == 'None' else \
+                    config_params['elasticsearch']['user']
+                config_params['elasticsearch']['pw'] = None if config_params['elasticsearch']['pw'] == 'None' else \
+                    config_params['elasticsearch']['pw']
+                config_params['api']['user'] = None if config_params['api']['user'] == 'None' else \
+                    config_params['api']['user']
+                config_params['api']['pw'] = None if config_params['api']['pw'] == 'None' else \
+                    config_params['api']['pw']
+                config_params['models']['refresh_pickles'] = None if config_params['models']['refresh_pickles'] in ['None', 'False'] else \
+                    config_params['models']['refresh_pickles']
 
                 self.elasticsearch_host = config_params['elasticsearch']['host']
                 self.elasticsearch_index_models = config_params['elasticsearch']['models']['index']
                 self.elasticsearch_index_requestlog = config_params['elasticsearch']['request_log']['index']
                 self.elasticsearch_verify = config_params['elasticsearch']['verify']
-                self.elasticsearch_auth = config_params['elasticsearch']['auth']
+                self.elasticsearch_user = config_params['elasticsearch']['user']
+                self.elasticsearch_pass = config_params['elasticsearch']['pw']
                 self.api_index = config_params['api']['index']
                 self.api_version = config_params['api']['version']
                 self.api_missing = config_params['api']['missing']
                 self.api_session_expiration = config_params['api']['session_expiration']
-                self.api_auth = config_params['api']['auth']
+                self.api_user = config_params['api']['user']
+                self.api_pass = config_params['api']['pw']
                 self.api_secret = config_params['api']['secret']
                 self.models_preload_pickles = config_params['models']['preload_pickles']
                 self.models_refresh_pickles = config_params['models']['refresh_pickles']
@@ -106,7 +118,7 @@ class _LoadConfig:
             host=self.elasticsearch_host,
             index=self.elasticsearch_index,
             ssl_verify=self.elasticsearch_verify,
-            auth=self.elasticsearch_auth
+            auth=(self.elasticsearch_user, self.elasticsearch_pass)
         )
 
         return connection
@@ -124,17 +136,30 @@ class _LoadConfig:
 
     def preload_pickles(self, server_config):
         pickles = {}
-        if 'Contents' in server_config.s3_connection.list_objects(Bucket=server_config.sys_config.s3_bucket).keys():
-            for key in server_config.s3_connection.list_objects(Bucket=server_config.sys_config.s3_bucket)['Contents']:
-                response = server_config.s3_connection.get_object(Bucket=server_config.sys_config.s3_bucket,
-                                                                  Key=key['Key'])
-                response_body = response['Body'].read()
-                p_obj = dill.loads(response_body)
-                pickles[key['Key']] = p_obj
-            self.pickle_jar = pickles
-            logging.info('Successfully loaded models, encoders, and feature generator objects.')
-        else:
-            logging.info('No pickled objects in bucket.')
+        success = False
+        while success is False:
+            try:
+                if 'Contents' in server_config.s3_connection.list_objects(Bucket=server_config.sys_config.s3_bucket).keys():
+                    for key in server_config.s3_connection.list_objects(Bucket=server_config.sys_config.s3_bucket)['Contents']:
+                        response = server_config.s3_connection.get_object(Bucket=server_config.sys_config.s3_bucket,
+                                                                          Key=key['Key'])
+                        response_body = response['Body'].read()
+                        p_obj = dill.loads(response_body)
+                        pickles[key['Key']] = p_obj
+                    self.pickle_jar = pickles
+                    success = True
+                    logging.info('Successfully loaded models, encoders, and feature generator objects.')
+                else:
+                    success = True
+                    logging.info('No pickled objects in bucket.')
+            except Exception as ex:
+                logging.warning(ex)
+                time.sleep(10)
+                pass
+
+        if len(pickles.keys()) == 0:
+            logging.info('Pickle jar empty, setting models.preload_pickles to False.')
+            self.models_preload_pickles = False
 
         return pickles
 
@@ -152,15 +177,13 @@ class Connect:
         self.api_resources = None
         self.base_url = None
 
-    def config(self, config_yaml_path, server=False):
+    def config(self, config_yaml_path):
         self.config_yaml_path = config_yaml_path
         self.sys_config = _LoadConfig(config_yaml_path=self.config_yaml_path)
         self.sys_config.config()
         self.es_connection_models = self.sys_config.elasticsearch(self.sys_config.elasticsearch_index_models)
         self.es_connection_requestlog = self.sys_config.elasticsearch(self.sys_config.elasticsearch_index_requestlog)
         self.s3_connection = self.sys_config.aws_s3()
-        if self.sys_config.models_preload_pickles is True and server is True:
-            self.sys_config.preload_pickles(self)
         self.base_url = self.sys_config.api_index + self.sys_config.api_version
 
         return self
@@ -512,6 +535,37 @@ class _ElasticSearch:
                 return {
                            'models': r['hits']['hits'],
                            'description': 'Models that match the specified search criteria in the Elasticsearch index.'
+                       }, 200
+
+        def get_by_id(self, model_id):
+
+            r = requests.get(
+                self.host + self.index + self.index + '/' + model_id,
+                auth=self.auth
+            )
+
+            if r.status_code != 200:
+                logging.warning(r)
+                return {'description': 'Error retrieving model from Elasticsearch.'}, 400
+            else:
+                return {
+                           'models': r.json()['_source'],
+                           'description': 'Model that matches the specified ID in the Elasticsearch index.'
+                       }, 200
+
+        def delete(self, model_id):
+
+            r = requests.delete(
+                self.host + self.index + self.index + '/' + model_id,
+                auth=self.auth
+            )
+
+            if r.status_code != 200:
+                logging.warning(r)
+                return {'description': 'Error deleting model from Elasticsearch.'}, 400
+            else:
+                return {
+                           'description': 'Model successfully deleted from Elasticsearch.'
                        }, 200
 
         def update(self, model=None, update_dict=None):

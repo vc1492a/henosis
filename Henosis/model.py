@@ -30,7 +30,7 @@ from Henosis.utils import _ElasticSearch
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 __author__ = 'Valentino Constantinou'
-__version__ = '0.0.10'
+__version__ = '0.0.11'
 __license__ = 'Apache License, Version 2.0'
 
 
@@ -65,17 +65,12 @@ class Models(object):
         else:
             logging.info('No pickled objects in bucket.')
 
-    def _load(self, src):
+    def _load_from_bucket(self, src):
         '''
-        Allows for the retrieval of a previously trained model via Amazon S3 or the preloaded
-        pickle_jar of models and encoders.
-        :param src:
-        :return:
+        Allows for the retrieval of a previously trained model via Amazon S3.
+        :param src: file path in S3 of the object to be retrieved.
+        :return: the object retrieved from Amazon S3.
         '''
-
-        # use preloaded dictionary
-        if self.server_config.sys_config.models_preload_pickles:
-            return self.server_config.sys_config.pickle_jar[src]
 
         # use global s3_connection and s object
         response = self.server_config.s3_connection.get_object(Bucket=self.server_config.sys_config.s3_bucket, Key=src)
@@ -83,6 +78,25 @@ class Models(object):
         p_obj = dill.loads(response_body)
 
         return p_obj
+
+    def _delete_from_bucket(self, src):
+        # use global s3_connection and s object
+        response = self.server_config.s3_connection.delete_object(Bucket=self.server_config.sys_config.s3_bucket, Key=src)
+        if response['ResponseMetadata']['HTTPStatusCode'] == 204:
+            logging.info(src + ' deleted from bucket successfully.')
+        else:
+            logging.warning('Error deleteing ' + src + ' from bucket.')
+
+    def _get_info(self, model_id):
+        '''
+        Retrieve model information by using a model's unique ID.
+        :param model_id: a unique identifier in the Elasticsearch index.
+        :return: model information for the given ID.
+        '''
+
+        model_info = _ElasticSearch().Models(self.server_config).get_by_id(model_id)[0]
+
+        return model_info
 
     def _store(self, model, model_path, encoder_path, encoder, override=False):
         '''
@@ -159,6 +173,9 @@ class Models(object):
 
         self.index.update(model)
 
+    def _delete_from_index(self, model_id):
+        _ElasticSearch().Models(self.server_config).delete(model_id)
+
     @staticmethod
     def _train(model, X, y, balance=None, encoder=None):
         '''
@@ -233,9 +250,8 @@ class Models(object):
         scikit-learn models.
         '''
 
-        def __init__(self, estimator=None, name=None, encoder=None):
+        def __init__(self, estimator=None, encoder=None):
             self.estimator = estimator
-            self.name = name
             self.id = None
             self.deployed = False
             self.call_count = 0
@@ -245,7 +261,6 @@ class Models(object):
             self.test_results = None
             self.dependent = None
             self.independent = None
-            self.classes = None
             self.model = None
             self.encoder = encoder
             self.tpr = None
@@ -261,6 +276,10 @@ class Models(object):
             self.test_time = None
 
         def train(self, data):
+
+            if self.estimator is None:
+                logging.warning('Model estimator not yet specified. Please define or load an estimator.', UserWarning)
+
             self.model = OneVsRestClassifier(self.estimator).fit(data.X_train, data.y_train)
             self.dependent = data.dependent
             independent_vars = []
@@ -281,7 +300,7 @@ class Models(object):
         def test(self, data):
 
             if self.model is None:
-                logging.warning('Model not yet specified. Please train model or load one from disk.', UserWarning)
+                logging.warning('Model not yet specified. Please train or load a model.', UserWarning)
 
             test_results, timestamp, test_time = Models()._test(self.model, data.X_test, data.y_test)
 
@@ -292,7 +311,7 @@ class Models(object):
         def predict(self, X):
 
             if self.model is None:
-                logging.warning('Model not yet specified. Please train model or load one from disk.', UserWarning)
+                logging.warning('Model not yet specified. Please train or load a model.', UserWarning)
 
             y_pred = self.model.predict(X)
 
@@ -301,7 +320,7 @@ class Models(object):
         def predict_proba(self, X):
 
             if self.model is None:
-                logging.warning('Model not yet specified. Please train model or load one from disk.', UserWarning)
+                logging.warning('Model not yet specified. Please train or load a model.', UserWarning)
 
             Y_pred_proba = self.model.predict_proba(X)
 
@@ -318,8 +337,95 @@ class Models(object):
             )
             logging.info('Model stored successfully.')
 
-        def deploy(self, server_config, deploy=False, recommendation_threshold=0.0):
+        def load_model(self, model_id, server_config):
+            models_connection = Models(server_config=server_config)
+            model_info = models_connection._get_info(model_id)
 
+            self.id = model_info['models']['id']
+            self.deployed = model_info['models']['deployed']
+            self.call_count = model_info['models']['callCount']
+            self.last_call = model_info['models']['lastCall']
+            self.recommendation_threshold = model_info['models']['recommendationThreshold']
+            self.train_results = {
+                'accuracy': model_info['models']['trainAccuracy'],
+                'recall': model_info['models']['trainPrecision'],
+                'precision': model_info['models']['trainPrecision'],
+                'f1': model_info['models']['trainF1']
+            }
+            self.test_results = {
+                'accuracy': model_info['models']['testAccuracy'],
+                'recall': model_info['models']['testPrecision'],
+                'precision': model_info['models']['testPrecision'],
+                'f1': model_info['models']['testF1']
+            }
+            self.dependent = model_info['models']['dependent']
+            self.independent = model_info['models']['independent']
+            self.model_path = model_info['models']['modelPath']
+            self.encoder_path = model_info['models']['encoderPath']
+            self.encoder_type = model_info['models']['encoderType']
+            self.train_timestamp = model_info['models']['lastTrainedDate']
+            self.train_time = model_info['models']['trainTime']
+            self.train_data_balance = model_info['models']['trainDataBalance']
+            self.test_timestamp = model_info['models']['lastTestedDate']
+            self.test_time = model_info['models']['testTime']
+
+            model = models_connection._load_from_bucket(model_info['models']['modelPath'])
+            self.model = model
+            self.estimator = self.model.estimator
+            if self.encoder_path is not None:
+                self.encoder = models_connection._load_from_bucket(self.encoder_path)
+
+            return self
+
+        @staticmethod
+        def load_generators(model_id, server_config):
+            models_connection = Models(server_config=server_config)
+            model_info = models_connection._get_info(model_id)
+            generators = []
+            for i in model_info['models']['independent']:
+                if isinstance(i, dict):
+                    if 'generator_path' in i.keys():
+                        func = models_connection._load_from_bucket(i['generator_path'])
+                        generators.append(func)
+
+            return generators
+
+        def delete_model(self, model_id, server_config):
+            models_connection = Models(server_config=server_config)
+            model_info = models_connection._get_info(model_id)
+            # delete the modelPath and encoderPath objects in S3
+            models_connection._delete_from_bucket(model_info['models']['modelPath'])
+            models_connection._delete_from_bucket(model_info['models']['encoderPath'])
+            # delete generators
+            self.delete_generators(model_id, server_config)
+            # then delete from Elasticsearch
+            models_connection._delete_from_index(model_id)
+
+        @staticmethod
+        def delete_generators(model_id, server_config):
+            models_connection = Models(server_config=server_config)
+            model_info = models_connection._get_info(model_id)
+            all_models = models_connection.index.get()[0]
+
+            generator_paths = []
+            to_delete = []
+            for i in model_info['models']['independent']:
+                if isinstance(i, dict):
+                    if 'generator_path' in i.keys():
+                        generator_paths.append(i['generator_path'])
+                        to_delete.append(i['generator_path'])
+            for m in all_models['models']:
+                if m['_id'] != model_info['models']['id']:
+                    for i in m['_source']['independent']:
+                        if isinstance(i, dict):
+                            if 'generator_path' in i.keys():
+                                if i['generator_path'] in generator_paths and i['generator_path'] in to_delete:
+                                    to_delete.remove(i['generator_path'])
+                                    logging.info(i['generator_path'] + ' shared with another model, skipping delete.')
+            for i in to_delete:
+                models_connection._delete_from_bucket(i)
+
+        def deploy(self, server_config, deploy=False, recommendation_threshold=0.0):
             if not self.model_path or not self.encoder_path:
                 logging.warning('Must store model and encoder prior to deployment.', UserWarning)
             else:

@@ -29,7 +29,6 @@ import operator
 import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.preprocessing import LabelEncoder
-import subprocess
 import sys
 import threading
 import time
@@ -39,9 +38,10 @@ from Henosis.utils import Connect, _ElasticSearch, _SessionManager
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 queue = None
+threads = []
 
 __author__ = 'Valentino Constantinou'
-__version__ = '0.0.10'
+__version__ = '0.0.11'
 __license__ = 'Apache License, Version 2.0'
 
 
@@ -73,10 +73,9 @@ class _Auth:
         @wraps(f)
         def decorated(*args, **kwargs):
             auth = request.authorization
-            config = args[0].server_config.sys_config.api_auth
             if not auth:
                 pass
-            elif not _Auth.check_auth(auth.username, auth.password, config[0], config[1]):
+            elif not _Auth.check_auth(auth.username, auth.password, args[0].server_config.sys_config.api_user, args[0].server_config.sys_config.api_pass):
                 return _Auth.authenticate()
             return f(*args, **kwargs)
 
@@ -252,7 +251,7 @@ class _FormProcessor(object):
         # if the generated variable is not in the form, load the generator and populate the form
         if independent_var['name'] not in form_data.keys() and 'generator_path' in independent_var.keys() and set(independent_var['inputs']) <= set(
                 form_data.keys()):
-            g = self.model_functions._load(independent_var['generator_path'])
+            g = self.model_functions._load_from_bucket(independent_var['generator_path'])
             # need way to handle multiple inputs for functions
             input_vals = [form_data[inp] for inp in independent_var['inputs']]
             return g(*input_vals)
@@ -271,14 +270,14 @@ class _FormProcessor(object):
     def load_vectorizer(self, input_data, encoder_type, encoder_path):
         if encoder_type == 'LabelEncoder' and encoder_path is not None:
             encoder = LabelEncoder()
-            encoder.classes_ = self.model_functions._load(encoder_path)
+            encoder.classes_ = self.model_functions._load_from_bucket(encoder_path)
             input_data = _MultiColumnLabelEncoder().fit_transform(input_data)
         elif encoder_type in self.text_vectorizers and encoder_path is not None:
             if encoder_type == 'CountVectorizer':
                 encoder = CountVectorizer()
             else:
                 encoder = TfidfVectorizer()
-            encoder = self.model_functions._load(encoder_path)
+            encoder = self.model_functions._load_from_bucket(encoder_path)
             # gather text from columns and place in single list for processing if not empty
             X_t = []
             for i in input_data.columns.values:
@@ -398,7 +397,7 @@ class _FormProcessor(object):
                     return False, e
                 # load the estimator
                 try:
-                    pred_m = self.model_functions._load(m['_source']['modelPath'])
+                    pred_m = self.model_functions._load_from_bucket(m['_source']['modelPath'])
                 except Exception as e:
                     logging.warning(e)
                     logging.warning('Error loading model.')
@@ -451,8 +450,8 @@ class _FormProcessor(object):
 class ServerThread(threading.Thread):
 
     def __init__(self, app, port=5005):
-        self.port = port
         threading.Thread.__init__(self)
+        self.port = port
         self.srv = WSGIServer(("0.0.0.0", self.port), app)
         self.ctx = app.app_context()
         self.ctx.push()
@@ -464,23 +463,29 @@ class ServerThread(threading.Thread):
     def shutdown(self):
         logging.info('Stopping threaded server.')
         self.srv.stop()
+        self.srv.close()
+
+        del self
 
 
-def start_server(app, port=5005):
+def master_start_server(app, port=5005):
     global server
     server = ServerThread(app, port=port)
     server.start()
+    threads.append(server)
 
 
-def stop_server():
+def master_stop_server():
     global server
     server.shutdown()
+    del server
 
 
 class Server:
 
-    def __init__(self):
+    def __init__(self, connection):
         self.config_yaml_path = None
+        self.sc = connection
         self.sys_config = None
         self.es_connection_models = None
         self.es_connection_requestlog = None
@@ -490,26 +495,21 @@ class Server:
         self.api_resources = None
         self.base_url = None
 
-    def config(self, config_yaml_path):
-        sc = Connect().config(config_yaml_path, server=True)
-        self.config_yaml_path = sc.config_yaml_path
-        self.sys_config = sc.sys_config
-        self.es_connection_models = sc.sys_config.elasticsearch(sc.sys_config.elasticsearch_index_models)
-        self.es_connection_requestlog = sc.sys_config.elasticsearch(sc.sys_config.elasticsearch_index_requestlog)
-        self.s3_connection = sc.sys_config.aws_s3()
-        self.base_url = sc.sys_config.api_index + sc.sys_config.api_version
+    def config(self):
+        self.config_yaml_path = self.config_yaml_path
+        self.sys_config = self.sc.sys_config
+        self.es_connection_models = self.sc.sys_config.elasticsearch(self.sc.sys_config.elasticsearch_index_models)
+        self.es_connection_requestlog = self.sc.sys_config.elasticsearch(self.sc.sys_config.elasticsearch_index_requestlog)
+        self.s3_connection = self.sc.s3_connection
+        self.base_url = self.sc.sys_config.api_index + self.sc.sys_config.api_version
 
         return self
 
-    def reload_pickles(self, start):
-        seconds = 60. * self.sys_config.models_refresh_pickles
-        t = threading.Timer(seconds, self.reload_pickles, [False])
-        t.start()
-        logging.info('Pickled objects preloading every %s minutes according to reload schedule.', self.sys_config.models_refresh_pickles)
+    @staticmethod
+    def insert_queue():
+        logging.info('Restarting Henosis.')
         global queue
-        if start is False:
-            logging.info('Restarting Henosis.')
-            queue.put("reload pickles")
+        queue.put("reload pickles")
 
     def start_queue(self, q):
         # set up the restart queue
@@ -517,7 +517,14 @@ class Server:
         queue = q
         # periodically refresh models if specified
         if self.sys_config.models_refresh_pickles is not None and self.sys_config.models_preload_pickles is True:
-            self.reload_pickles(True)
+            global t_timer
+            seconds = 60. * self.sys_config.models_refresh_pickles
+            logging.info('Starting timer.')
+            logging.info('Pickled objects preloading every %s minutes according to reload schedule.',
+                         self.sys_config.models_refresh_pickles)
+            t_timer = threading.Timer(seconds, self.insert_queue)
+            t_timer.start()
+            threads.append(t_timer)
 
     def start_server(self, routes=None, api_resources=None, port=5005):
 
@@ -568,32 +575,32 @@ class Server:
         logging.info('Running server on port: ' + str(self.port))
 
         # serve the app
-        start_server(app, port=self.port)
+        master_start_server(app, port=self.port)
 
-    def run(self, routes=None, api_resources=None, port=5005):
-
-        # create a Queue that will be used to trigger a restart
+    def run(self, routes=None, api_resources=None, port=5005, init=True):
+        # create a queue on each restart
         q = mp.Queue()
+        # if init is false, kill the server
+        if init is False:
+            master_stop_server()
+            del self.sys_config.pickle_jar
+            self.sys_config.pickle_jar = {}
 
-        # start the threaded server
-        t_server = threading.Thread(target=self.start_server, args=[routes, api_resources, port])
-        t_server.start()
-        t_restart = threading.Thread(target=self.start_queue, args=[q])
-        t_restart.start()
+        # preload pickles
+        if self.sys_config.models_preload_pickles is True:
+            self.sys_config.preload_pickles(self)
 
-        # watching queue, if there is no call than sleep, otherwise break and restart app
+        # start the new server (starts a thread via master_start_server)
+        self.start_server(routes, api_resources, port)
+        # start the thread that periodically adds to the queue if refresh_pickles is not None
+
+        if self.sys_config.models_refresh_pickles is not None:
+            self.start_queue(q)
+        # watching queue
         while True:
             if q.empty():
-                time.sleep(1)
+                time.sleep(5)
             else:
-                t_server.join()
-                stop_server()
-                break
-
-        # restart app using same start arguments
-        args = [sys.executable] + [sys.argv[0]]
-        subprocess.call(args)
-
-
+                self.run(routes=routes, api_resources=api_resources, port=port, init=False)
 
 

@@ -14,7 +14,7 @@ Henosis is being developed at the [NASA Jet Propulsion Laboratory](https://jpl.n
 using user-driven development (UDD) with generous support from the Office of Safety and
 Mission Success (5X).
 
-[![PyPi](https://img.shields.io/badge/pypi-0.0.10-green.svg)](https://pypi.python.org/pypi/Henosis/0.0.10)
+[![PyPi](https://img.shields.io/badge/pypi-0.0.11-green.svg)](https://pypi.python.org/pypi/Henosis/0.0.11)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 
@@ -96,11 +96,12 @@ Amazon S3 bucket. Following that, deploying an instance of Henosis for
 making recommendations is as easy as placing the following in a Python file.
 
 ```python
-from Henosis.server import Server
+from Henosis.server import Connect, Server
 
 # run the server
-s = Server().config(config_yaml_path='config.yaml')
-s.run()
+c = Connect().config(config_yaml_path='config.yaml')
+s = Server(c).config()
+s.run(port=5005)
 ```
 
 Once a Henosis instance is running, developers can query for recommendations,
@@ -163,7 +164,7 @@ If you'd like, you can also fork the repository and pull Henosis to a local dire
 
 The latest Henosis documentation is available [here](https://www.henosis.io/)
 and covers how to use Henosis for modeling and providing recommendations
-within your form-containing applications.
+within your applications.
 
 ## Motivation
 
@@ -204,7 +205,7 @@ the California Institute of Technology.
 - [NASA Jet Propulsion Laboratory](https://jpl.nasa.gov/)
     - Ian Colwell
     - Leslie Callum
-    - Harold Schone
+    - Harald Schone
     - [Kyle Hundman](https://github.com/khundman)
     - [Paul Ramirez](https://github.com/darth-pr)
 

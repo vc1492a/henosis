@@ -104,10 +104,11 @@ making recommendations is as easy as placing the following in a Python file (see
 > For Developers
 
 ```python
-from Henosis.server import Server
+from Henosis.server import Connect, Server
 
 # run the server
-s = Server().config(config_yaml_path='config.yaml')
+c = Connect().config(config_yaml_path='config.yaml')
+s = Server(c).config()
 s.run()
 ```
 
@@ -208,7 +209,8 @@ required for model storage and deployment as well as running a Henosis instance.
 elasticsearch:
   host: 'https://<host>:<port>'
   verify: False
-  auth: !!python/tuple ['<username>', '<password>']
+  user: '<username>'
+  pw: '<password>'
   models:
     index: '/model'
   request_log:
@@ -228,7 +230,8 @@ api:
   version: '/v0.1'
   missing: '999999'
   session_expiration: 10
-  auth: !!python/tuple ['<username>', '<password>']
+  user: '<username>'
+  pw: '<password>'
 
 # Models
 models:
@@ -584,7 +587,6 @@ m = Models().SKModel(MultinomialNB(alpha=1e-10))
 The SKModel object has the following attributes:
 
 - _call_count_: The number of times the model has been called as a result of an API request.
-- _classes_: The classes of the dependent variable being modeled.
 - _dependent_: The name of the variable being modeled.
 - _deployed_: A boolean which indicates whether or not the model is deployed and available for use.
 - _encoder_: The scikit-learn encoder used in encoding independent variables (optional).
@@ -706,7 +708,7 @@ the model can be stored by referencing this configuration.
 ```python
 # NOTE: if this is your first time loading the config yaml, set preload pickles to False in the config file
 from Henosis.utils import Connect
-s = Connect().config(config_yaml_path='config.yaml') # may need to be absolute path
+s = Connect().config(config_yaml_path='config.yaml')
 ```
 
 ```python
@@ -722,6 +724,46 @@ m.store(
 *encoder_path* and *encoder* are optional and only needed if variable
 encoders are used as part of the training process, such as when
 using CountVectorizer or TfidfVectorizer when training models.
+
+### Load Model
+
+It may be useful to load a model from a running Henosis instance to
+change its deployment status or work with locally.
+
+> Load Model
+
+```python
+# NOTE: if this is your first time loading the config yaml, set preload pickles to False in the config file
+from Henosis.utils import Connect
+s = Connect().config(config_yaml_path='config.yaml')
+```
+
+```python
+# now specify a model ID and pass the connection object
+m = Models().SKModel().load_model('bbe4830f5eb24a73a299b720eef58ccd', s)
+```
+
+Note: Retrain the model to obtain *tpr*, *fpr*, and *roc_auc* attributes.
+
+### Load Generators
+
+It may also be useful to load a function used to generate new data or
+process request data for modeling, such as `clean_text` in
+*Tagging Feature Generators*. Generator functions associated with a model
+are returned in a list.
+
+> Load Generators
+
+```python
+# NOTE: if this is your first time loading the config yaml, set preload pickles to False in the config file
+from Henosis.utils import Connect
+s = Connect().config(config_yaml_path='config.yaml')
+```
+
+```python
+# now specify a model ID and pass the connection object
+generators = Models().SKModel().load_generators('bbe4830f5eb24a73a299b720eef58ccd', s)
+```
 
 ### Deploy
 
@@ -745,6 +787,26 @@ be used in providing recommendations to users. For example, if set to
 class probability in the *top_n* predictions exceeds that threshold. To
 take a model offline, simply call the same function as above
 with *deploy=False* instead.
+
+### Delete Model
+
+To delete a model from the system (both from Elasticsearch and Amazon S3),
+use the `delete_model` function.
+When deleting a model with generator functions, those functions are
+checked to see if they are used by other models. Only generator functions
+unique to the model are deleted when deleting a model from the system.
+
+> Delete Model
+
+```python
+# NOTE: if this is your first time loading the config yaml, set preload pickles to False in the config file
+from Henosis.utils import Connect
+s = Connect().config(config_yaml_path='config.yaml')
+```
+
+```python
+Models().SKModel().delete_model('40fe247e909845be897a7c0c395a52c3', s)
+```
 
 # Deployment
 
@@ -772,8 +834,9 @@ models.
 > Load Config
 
 ```python
-from Henosis.server import Server
-s = Server().config(config_yaml_path='config.yaml', server=True) # may need to be absolute path, set server to True
+from Henosis.server import Connect, Server
+c = Connect().config(config_yaml_path='config.yaml')
+s = Server(c).config()
 ```
 
 ### Run
@@ -831,7 +894,8 @@ custom_routes = [
     }
 ]
 
-s = Server().config(config_yaml_path='config.yaml', server=True) # may need to be absolute path, set server to True
+c = Connect().config(config_yaml_path='config.yaml')
+s = Server(c).config()
 s.run(routes=custom_routes, api_resources=custom_endpoints)
 ```
 
@@ -1094,6 +1158,10 @@ You can also use Henosis to obtain information about requests from the
 request log Elasticsearch index. This information may be useful for
 debugging purposes or for assessing the behavior of your users (i.e.
 those making requests to Henosis for recommendations).
+
+### HTTP Request
+
+`GET https://<your_host>/api/<your_api_version>/requestlogs`
 
 ```python
 import json
