@@ -1,6 +1,6 @@
 # Henosis
 
-Henosis is a cloud-native, lightweight Python-based recommender framework
+Henosis is a cloud-native, lightweight Python classification-based recommender framework
 that facilitates providing recommendations to users of applications, like this:
 
 <br/>
@@ -14,7 +14,7 @@ Henosis is being developed at the [NASA Jet Propulsion Laboratory](https://jpl.n
 using user-driven development (UDD) with generous support from the Office of Safety and
 Mission Success (5X).
 
-[![PyPi](https://img.shields.io/badge/pypi-0.0.11-green.svg)](https://pypi.python.org/pypi/Henosis/0.0.11)
+[![PyPi](https://img.shields.io/badge/pypi-0.0.12-green.svg)](https://pypi.python.org/pypi/Henosis/0.0.12)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 
@@ -51,10 +51,10 @@ d.load(csv_path='file.csv')
 print(d.all.head())
 
 # split data
-d.test_train_split(
+d.train_test_split(
     d.all[X_vars],
     d.all[y_var],
-    share_train=0.8
+    test_size=0.2
 )
 
 # fit a model (use any categorical scikit-learn model)
@@ -134,7 +134,6 @@ data available in the query (REST API request).
     - Flask-HTTPAuth
     - Flask-RESTful
     - gevent
-    - imbalanced-learn
     - Jinja2
     - jwt
     - gevent
@@ -203,7 +202,7 @@ the California Institute of Technology.
 ## Acknowledgements
 
 - [NASA Jet Propulsion Laboratory](https://jpl.nasa.gov/)
-    - Ian Colwell
+    - [Ian Colwell](https://github.com/iancolwell)
     - Leslie Callum
     - Harald Schone
     - [Kyle Hundman](https://github.com/khundman)

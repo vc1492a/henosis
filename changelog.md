@@ -4,8 +4,35 @@ All notable changes to Henosis will be documented in this Changelog.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## 0.0.11 - 2018-07-05
+## 0.0.12 - 2018-XX-XX
+### Added
+- The `modelClass` indicator as described in [issue #28](https://github.com/vc1492a/henosis/issues/28). **DOCS**
+- Language in the documentation in reference to classification
+as outlined in [issue #33](https://github.com/vc1492a/henosis/issues/33). **DOCS**
+- Unit test coverage statistics as outlined in [issue #25](https://github.com/vc1492a/henosis/issues/25).
+- Unit tests as outlined in [issue #24](https://github.com/vc1492a/henosis/issues/24),
+with additional tests to follow in later releases.
 
+### Changed
+- Addressed [issue #32](https://github.com/vc1492a/henosis/issues/32) by ensuring a model's ID is returned in the
+response when storing and deploying models.
+- Removed the dependency for `imbalanced-learn` and `pymssql` as
+outlined in [issue #31](https://github.com/vc1492a/henosis/issues/31). **DOCS**
+- Changed the parameter name in `Data().test_train_split` from `share_train` to
+`test_size` and `test_train_split` to `train_test_split` to align with the
+scikit-learn implementation
+([issue #30](https://github.com/vc1492a/henosis/issues/30)). **DOCS**
+- Removed redundant code discovered in unit testing throughout the repository.
+
+### Fixed
+- An issue with `preload_pickles` whereby models were individually pulled
+from AWS S3 with each request despite being loaded into memory when
+`preload_pickles` is set to `True`.
+
+
+- !!! An issue in the documentation where
+
+## 0.0.11 - 2018-07-05
 ### Added
 - Added a check that resets `models.preload_pickles` to False if the AWS S3 bucket is empty for consistency ([issue #23](https://github.com/vc1492a/henosis/issues/23)).
 - Added `load_model` and `load_generators` functions, which allow users to

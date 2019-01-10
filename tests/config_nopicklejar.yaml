@@ -1,0 +1,35 @@
+# ElasticSearch
+elasticsearch:
+  host: '' # SPIN UP ELASTIC FOR THIS TEST
+  verify: False
+  user: '' # SPIN UP ELASTIC FOR THIS TEST
+  pw: '' # SPIN UP ELASTIC FOR THIS TEST
+  models:
+    index: '/model'
+  request_log:
+    index: '/requestlog'
+
+# AWS S3
+aws_s3:
+  region: 'us-gov-west-1' # SPIN UP S3 FOR THIS TEST
+  bucket: 'recsys-prs-pfr-test' # SPIN UP S3 FOR THIS TEST
+  key: '' # SPIN UP S3 FOR THIS TEST
+  secret: '' # SPIN UP S3 FOR THIS TEST
+
+# Api
+api:
+  host: 'https://www.test.com'
+  index: '/api'
+  version: '/v0.1'
+  missing: '999999'
+  session_expiration: 1 # in minutes
+  user: None
+  pw: None
+  secret: ''
+
+# Models
+models:
+  preload_pickles: False
+  refresh_pickles: None # in minutes
+  predict_probabilities: True
+  top_n: 3

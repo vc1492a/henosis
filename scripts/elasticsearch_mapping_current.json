@@ -78,6 +78,9 @@
       "modelType": {
         "type": "text"
       },
+      "modelClass": {
+        "type": "text"
+      },
       "encoderPath": {
         "type": "text"
       },

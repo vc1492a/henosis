@@ -79,6 +79,9 @@ curl -XPUT '<host>/model/_mapping/model' -H 'Content-Type: application/json' -d 
       "modelType": {
         "type": "text"
       },
+      "modelClass": {
+        "type": "text"
+      },
       "encoderPath": {
         "type": "text"
       },

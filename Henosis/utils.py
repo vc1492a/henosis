@@ -1,4 +1,4 @@
-'''
+"""
 ========================================================================================================
 Copyright 2017, by the California Institute of Technology. ALL RIGHTS RESERVED.
 United States Government Sponsorship acknowledged. Any commercial use must be negotiated with the Office of Technology
@@ -7,7 +7,7 @@ accepting this software, the user agrees to comply with all applicable U.S. expo
 responsibility to obtain export licenses, or other export authority as may be required before exporting such
 information to foreign countries or providing access to foreign persons.
 ========================================================================================================
-'''
+"""
 
 # imports #
 import boto3
@@ -25,7 +25,7 @@ import yaml
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 __author__ = 'Valentino Constantinou'
-__version__ = '0.0.11'
+__version__ = '0.0.12'
 __license__ = 'Apache License, Version 2.0'
 
 
@@ -60,11 +60,11 @@ class _LoadConfig:
 
     def config(self):
 
-        '''
+        """
         Loads recommender system parameters from config.yaml.
         :param src:
         :return:
-        '''
+        """
 
         with open(self.config_yaml_path, 'r') as c:
             try:
@@ -106,14 +106,18 @@ class _LoadConfig:
 
                 return self
 
-            except yaml.YAMLError as exc:
-                logging.info(exc, RuntimeWarning)
-                logging.warning('Error reading config.yaml', RuntimeWarning)
+            except (TypeError, yaml.YAMLError) as ex:
+                logging.info(ex, RuntimeWarning)
+                logging.warning('Error parsing configuration file.', RuntimeWarning)
+
+            except KeyError as ex:
+                logging.info(ex, UserWarning)
+                logging.warning('KeyError when parsing configuration file. Check that all necessary keys are specified.', UserWarning)
 
     def elasticsearch(self, es_index=None):
         if es_index:
             self.elasticsearch_index = es_index
-        connection = _ElasticSearch().Connection()
+        connection = _Elasticsearch().Connection()
         connection.config(
             host=self.elasticsearch_host,
             index=self.elasticsearch_index,
@@ -136,30 +140,24 @@ class _LoadConfig:
 
     def preload_pickles(self, server_config):
         pickles = {}
-        success = False
-        while success is False:
-            try:
-                if 'Contents' in server_config.s3_connection.list_objects(Bucket=server_config.sys_config.s3_bucket).keys():
-                    for key in server_config.s3_connection.list_objects(Bucket=server_config.sys_config.s3_bucket)['Contents']:
-                        response = server_config.s3_connection.get_object(Bucket=server_config.sys_config.s3_bucket,
-                                                                          Key=key['Key'])
-                        response_body = response['Body'].read()
-                        p_obj = dill.loads(response_body)
-                        pickles[key['Key']] = p_obj
-                    self.pickle_jar = pickles
-                    success = True
-                    logging.info('Successfully loaded models, encoders, and feature generator objects.')
-                else:
-                    success = True
-                    logging.info('No pickled objects in bucket.')
-            except Exception as ex:
-                logging.warning(ex)
-                time.sleep(10)
-                pass
+        try:
+            if 'Contents' in server_config.s3_connection.list_objects(Bucket=server_config.sys_config.s3_bucket).keys():
+                for key in server_config.s3_connection.list_objects(Bucket=server_config.sys_config.s3_bucket)['Contents']:
+                    response = server_config.s3_connection.get_object(Bucket=server_config.sys_config.s3_bucket,
+                                                                      Key=key['Key'])
+                    response_body = response['Body'].read()
+                    p_obj = dill.loads(response_body)
+                    pickles[key['Key']] = p_obj
+                self.pickle_jar = pickles
+                logging.info('Successfully loaded models, encoders, and feature generator objects.')
+            else:
+                self.models_preload_pickles = False
+                logging.info('No pickled objects in bucket.')
 
-        if len(pickles.keys()) == 0:
-            logging.info('Pickle jar empty, setting models.preload_pickles to False.')
+        except Exception as ex:
             self.models_preload_pickles = False
+            logging.warning(ex)
+            logging.warning('Error retrieving objects from S3.', RuntimeWarning)
 
         return pickles
 
@@ -179,8 +177,7 @@ class Connect:
 
     def config(self, config_yaml_path):
         self.config_yaml_path = config_yaml_path
-        self.sys_config = _LoadConfig(config_yaml_path=self.config_yaml_path)
-        self.sys_config.config()
+        self.sys_config = _LoadConfig(config_yaml_path=self.config_yaml_path).config()
         self.es_connection_models = self.sys_config.elasticsearch(self.sys_config.elasticsearch_index_models)
         self.es_connection_requestlog = self.sys_config.elasticsearch(self.sys_config.elasticsearch_index_requestlog)
         self.s3_connection = self.sys_config.aws_s3()
@@ -195,7 +192,7 @@ class _SessionManager:
         self.server_config = server_config
         self.session = session
         self.connection_requests = server_config.es_connection_requestlog
-        self.index = _ElasticSearch().Requests(server_config)
+        self.index = _Elasticsearch().Requests(server_config)
         self.sessionId = None
         self.sessionExpireDate = None
         self.timeIn = None
@@ -245,39 +242,37 @@ class _SessionManager:
             self.responseDescription = response.status
             response.set_cookie('session_id', idc, expires=timestamp_expire)
             return response
-        except Exception as e:
+        except Exception as ex:
+            logging.warning(ex, RuntimeError)
             logging.warning('Issue with cookie manager.', RuntimeError)
-            logging.warning(e, RuntimeError)
             return None
 
-    def log_request(self, response, start_time=None, end_time=None):
+    def log_request(self, response, start_time, end_time):
         if all(v is not None for v in [start_time, end_time]):
             self.timeIn = start_time
             self.timeOut = end_time
             self.timeElapsed = end_time - start_time
-
-        r = json.loads(response.get_data().decode('utf8'))
-
-        timestamp_in = datetime.datetime.fromtimestamp(self.timeIn).strftime('%Y-%m-%dT%H:%M:%S')
-        timestamp_out = datetime.datetime.fromtimestamp(self.timeOut).strftime('%Y-%m-%dT%H:%M:%S')
-
-        request_log = {
-            "sessionId": self.sessionId,
-            "sessionExpireDate": self.sessionExpireDate,
-            "timeIn": timestamp_in,
-            "timeOut": timestamp_out,
-            "timeElapsed": self.timeElapsed,
-            "responseStatusCode": self.responseCode,
-            "responseDescription": self.responseDescription,
-            "recommendations": r['predictions'],
-            "missingFields": list(r['predictions'].keys()),
-            "modelsUsed": r['modelsUsed'],
-        }
-
-        self.index.store(request_log)
+            r = json.loads(response.get_data().decode('utf8'))
+            timestamp_in = datetime.datetime.fromtimestamp(self.timeIn).strftime('%Y-%m-%dT%H:%M:%S')
+            timestamp_out = datetime.datetime.fromtimestamp(self.timeOut).strftime('%Y-%m-%dT%H:%M:%S')
+            request_log = {
+                "sessionId": self.sessionId,
+                "sessionExpireDate": self.sessionExpireDate,
+                "timeIn": timestamp_in,
+                "timeOut": timestamp_out,
+                "timeElapsed": self.timeElapsed,
+                "responseStatusCode": self.responseCode,
+                "responseDescription": self.responseDescription,
+                "recommendations": r['predictions'],
+                "missingFields": list(r['predictions'].keys()),
+                "modelsUsed": r['modelsUsed'],
+            }
+            self.index.store(request_log)
+        else:
+            logging.warning('Start and/or end times not passed or wrong format when logging request.', RuntimeWarning)
 
 
-class _ElasticSearch:
+class _Elasticsearch:
 
     class Common:
 
@@ -327,8 +322,9 @@ class _ElasticSearch:
         def validate_connection_property(property_dict):
             for p in property_dict:
                 if property_dict[p] is None:
-                    logging.warning('Property ' + p + ' must not be None', UserWarning)
-                    sys.exit()
+                    logging.warning('Property ' + p + ' must not be None.', RuntimeWarning)
+                    return False
+            return True
 
         @staticmethod
         def request_status_parser(request):
@@ -342,11 +338,16 @@ class _ElasticSearch:
                             indent=4
                         )
                     )
+                    return True
                 except json.decoder.JSONDecodeError:
-                    pass
+                    logging.warning('Error establishing connection to Elasticsearch resource due to JSON decode error.',
+                                    RuntimeWarning)
+                    logging.warning('Status code: ' + str(request.status_code))
+                    return False
             else:
-                logging.warning('Error establishing connection to Elasticsearch resource.', UserWarning)
+                logging.warning('Error establishing connection to Elasticsearch resource.', RuntimeWarning)
                 logging.warning('Status code: ' + str(request.status_code))
+                return False
 
         def test_host(self, host=None):
 
@@ -449,7 +450,7 @@ class _ElasticSearch:
 
         def get(self, **kwargs):
 
-            q = _ElasticSearch.Common.build_query(kwargs)
+            q = _Elasticsearch.Common.build_query(kwargs)
 
             r = requests.get(
                 self.host + self.index + '/_search?size=' + str(self.search_size),
@@ -501,7 +502,7 @@ class _ElasticSearch:
                 logging.warning(r)
                 return {
                            'response': r,
-                           'description': 'Error updating model ' + r['_id'] + '.'
+                           'description': 'Error obtaining counts.'
                        }, 400
             else:
                 return {'count': r['count'], 'description': 'The number of request logs indexed.'}, 200
@@ -519,7 +520,7 @@ class _ElasticSearch:
 
         def get(self, **kwargs):
 
-            q = _ElasticSearch.Common.build_query(kwargs)
+            q = _Elasticsearch.Common.build_query(kwargs)
 
             r = requests.get(
                 self.host + self.index + '/_search?size=' + str(self.search_size),
@@ -582,6 +583,7 @@ class _ElasticSearch:
                     "lastTestedDate": model.test_timestamp,
                     "modelPath": model.model_path,
                     "modelType": str(model.model),
+                    "modelClass": model.model_class,
                     "encoderPath": model.encoder_path,
                     "encoderType": model.encoder_type,
                     "testAccuracy": model.test_results["accuracy"],
@@ -595,7 +597,6 @@ class _ElasticSearch:
                     "trainTime": model.train_time,
                     "testTime": model.test_time,
                     "recommendationThreshold": model.recommendation_threshold,
-                    "trainDataBalance": model.train_data_balance
                 }
 
                 r = requests.put(
@@ -610,7 +611,7 @@ class _ElasticSearch:
                         logging.warning(r)
                         return {
                                    'response': r,
-                                   'description': 'Error updating model ' + r['_id'] + '.'
+                                   'description': 'Error updating counts.'
                                }, 400
                     else:
                         return {'description': 'Model ' + r['_id'] + ' updated successfully.'}, 200

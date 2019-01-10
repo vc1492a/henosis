@@ -1,4 +1,4 @@
-'''
+"""
 ========================================================================================================
 Copyright 2017, by the California Institute of Technology. ALL RIGHTS RESERVED.
 United States Government Sponsorship acknowledged. Any commercial use must be negotiated with the Office of Technology
@@ -7,13 +7,12 @@ accepting this software, the user agrees to comply with all applicable U.S. expo
 responsibility to obtain export licenses, or other export authority as may be required before exporting such
 information to foreign countries or providing access to foreign persons.
 ========================================================================================================
-'''
+"""
 
 # imports #
+from botocore.exceptions import ClientError
 import datetime
 import dill
-from imblearn.over_sampling import RandomOverSampler
-from imblearn.under_sampling import RandomUnderSampler
 import logging
 import numpy as np
 import os
@@ -25,27 +24,30 @@ import sys
 import time
 import uuid
 
-from Henosis.utils import _ElasticSearch
+from Henosis.utils import _Elasticsearch
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 __author__ = 'Valentino Constantinou'
-__version__ = '0.0.11'
+__version__ = '0.0.12'
 __license__ = 'Apache License, Version 2.0'
 
 
 # resources #
 class Models(object):
-    '''
+    """
     This class facilitates model training, testing, storage, and deployment, and defines the
     SKLearn model class which facilitates the use of scikit-learn models for making predictions.
-    '''
+    """
 
     def __init__(self, server_config=None):
+        self.server_config = None
+        self.connection_models = None
+        self.index = None
         if server_config:
             self.server_config = server_config
             self.connection_models = server_config.es_connection_models
-            self.index = _ElasticSearch().Models(server_config)
+            self.index = _Elasticsearch().Models(server_config)
 
     @staticmethod
     def _id_generator(model):
@@ -66,47 +68,65 @@ class Models(object):
             logging.info('No pickled objects in bucket.')
 
     def _load_from_bucket(self, src):
-        '''
+        """
         Allows for the retrieval of a previously trained model via Amazon S3.
         :param src: file path in S3 of the object to be retrieved.
         :return: the object retrieved from Amazon S3.
-        '''
+        """
 
-        # use global s3_connection and s object
-        response = self.server_config.s3_connection.get_object(Bucket=self.server_config.sys_config.s3_bucket, Key=src)
-        response_body = response['Body'].read()
-        p_obj = dill.loads(response_body)
+        if self.server_config is None:
+            logging.warning('Must specify server configuration before loading models from S3. Please define server_config.', UserWarning)
 
-        return p_obj
+        else:
+            try:
+                # use global s3_connection and s object
+                response = self.server_config.s3_connection.get_object(Bucket=self.server_config.sys_config.s3_bucket, Key=src)
+                response_body = response['Body'].read()
+                p_obj = dill.loads(response_body)
+                return p_obj
+
+            except ClientError as ex:
+                if ex.response['Error']['Code'] == 'NoSuchKey':
+                    logging.info('No pickled object with specified path in bucket.', UserWarning)
 
     def _delete_from_bucket(self, src):
-        # use global s3_connection and s object
-        response = self.server_config.s3_connection.delete_object(Bucket=self.server_config.sys_config.s3_bucket, Key=src)
-        if response['ResponseMetadata']['HTTPStatusCode'] == 204:
-            logging.info(src + ' deleted from bucket successfully.')
+
+        if self.server_config is None:
+            logging.warning('Must specify server configuration before loading models from S3. Please define server_config.', UserWarning)
+
         else:
-            logging.warning('Error deleteing ' + src + ' from bucket.')
+            # use global s3_connection and s object
+            response = self.server_config.s3_connection.delete_object(Bucket=self.server_config.sys_config.s3_bucket, Key=src)
+            if response['ResponseMetadata']['HTTPStatusCode'] == 204:
+                logging.info(src + ' deleted from bucket successfully.')
+            else:
+                logging.warning('Error deleting ' + src + ' from bucket.', RuntimeWarning)
 
     def _get_info(self, model_id):
-        '''
+        """
         Retrieve model information by using a model's unique ID.
         :param model_id: a unique identifier in the Elasticsearch index.
         :return: model information for the given ID.
-        '''
+        """
 
-        model_info = _ElasticSearch().Models(self.server_config).get_by_id(model_id)[0]
+        if self.server_config is None:
+            logging.warning('Must specify server configuration before loading model info from Elasticsearch. Please define server_config.', UserWarning)
 
-        return model_info
+        else:
+            model_info = _Elasticsearch().Models(self.server_config).get_by_id(model_id)[0]
+            if 'models' not in model_info.keys():
+                logging.warning('Model with specified ID not in Elasticsearch index.', UserWarning)
+            return model_info
 
     def _store(self, model, model_path, encoder_path, encoder, override=False):
-        '''
+        """
         Store a model and encoders via Amazon S3.
         :param model:
         :param model_path:
         :param encoder_path:
         :param encoder:
         :return:
-        '''
+        """
 
         # check if model path or encoder path already exist in S3
         if override is False:
@@ -165,28 +185,27 @@ class Models(object):
         self.index.update(model)
 
     def _deploy(self, model):
-        '''
+        """
         Sets a model stored in Elasticsearch to an active "deployed" state for use in henosis. Model
         parameters are updated in SKlearn for now. Although this function simply calls the
         :return:
-        '''
+        """
 
         self.index.update(model)
 
     def _delete_from_index(self, model_id):
-        _ElasticSearch().Models(self.server_config).delete(model_id)
+        _Elasticsearch().Models(self.server_config).delete(model_id)
 
     @staticmethod
-    def _train(model, X, y, balance=None, encoder=None):
-        '''
+    def _train(model, X, y, encoder=None):
+        """
         Trains a model and returns the results.
         :param model:
         :param X:
         :param Y:
-        :param balance:
         :param encoder:
         :return:
-        '''
+        """
         m = model.fit(X, y)
         start = time.time()
         y_score = m.predict(X)
@@ -207,18 +226,18 @@ class Models(object):
         timestamp = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%dT%H:%M:%S')
         time_spent = end - start
 
-        return train_results, timestamp, time_spent, balance
+        return train_results, timestamp, time_spent
 
     @staticmethod
     def _test(model, X, y):
-        '''
+        """
         Tests a model and returns the results.
         :param model:
         :param X:
         :param Y:
         :param load:
         :return:
-        '''
+        """
         y_test = np.array(y)
         start = time.time()
         y_score = model.predict(X)
@@ -245,10 +264,10 @@ class Models(object):
         return test_results, timestamp, time_spent
 
     class SKModel(object):
-        '''
+        """
         This class facilitates training, testing, storage, and deployment of
         scikit-learn models.
-        '''
+        """
 
         def __init__(self, estimator=None, encoder=None):
             self.estimator = estimator
@@ -262,6 +281,7 @@ class Models(object):
             self.dependent = None
             self.independent = None
             self.model = None
+            self.model_class = self.__class__.__name__
             self.encoder = encoder
             self.tpr = None
             self.fpr = None
@@ -271,7 +291,6 @@ class Models(object):
             self.encoder_type = None
             self.train_timestamp = None
             self.train_time = None
-            self.train_data_balance = None
             self.test_timestamp = None
             self.test_time = None
 
@@ -287,15 +306,13 @@ class Models(object):
                 independent_vars.append({"name": i})
             self.independent = independent_vars
 
-            train_results, timestamp, train_time, train_data_balance = Models()._train(self.model, data.X_train,
+            train_results, timestamp, train_time = Models()._train(self.model, data.X_train,
                                                                                        data.y_train,
-                                                                                       balance=data.balance,
                                                                                        encoder=self.encoder)
 
             self.train_results = train_results
             self.train_timestamp = timestamp
             self.train_time = train_time
-            self.train_data_balance = train_data_balance
 
         def test(self, data):
 
@@ -335,7 +352,7 @@ class Models(object):
                 encoder=encoder,
                 override=override
             )
-            logging.info('Model stored successfully.')
+            logging.info('Model ' + self.id + ' stored successfully.')
 
         def load_model(self, model_id, server_config):
             models_connection = Models(server_config=server_config)
@@ -365,7 +382,6 @@ class Models(object):
             self.encoder_type = model_info['models']['encoderType']
             self.train_timestamp = model_info['models']['lastTrainedDate']
             self.train_time = model_info['models']['trainTime']
-            self.train_data_balance = model_info['models']['trainDataBalance']
             self.test_timestamp = model_info['models']['lastTestedDate']
             self.test_time = model_info['models']['testTime']
 
@@ -434,7 +450,7 @@ class Models(object):
                 Models(server_config=server_config)._deploy(
                     model=self
                 )
-                logging.info('Model deployed successfully and will be available after the next server restart.')
+                logging.info('Model ' + self.id + ' deployed successfully.')
 
         def tag_generator(self, func, output_var, input_vars, generator_path=None):
             if generator_path:
@@ -458,13 +474,12 @@ class Models(object):
 
 
 class Data(object):
-    '''
+    """
     This class facilitates the loading, storage, and preparation of data for modeling purposes.
-    '''
+    """
 
     def __init__(self):
         self.all = None
-        self.balance = None
         self.X_train = None
         self.X_test = None
         self.y_train = None
@@ -474,25 +489,13 @@ class Data(object):
 
     def load(self, csv_path=None):
 
-        '''
+        """
         Load data for models in the recommender system from a variety of data sources. Currently supports
         local CSV files and MySQL databases.
-        :param src:
-        :param path:
-        :param host:
-        :param db:
-        :param un:
-        :param pw:
-        :param query:
+        :param csv_path:
         :return:
 
-        @TODO:
-        - elasticsearch
-        - postgres
-        - excel
-        - json # maybe just have this for elastic?
-        - sas
-        '''
+        """
 
         if csv_path:
             self.all = pd.read_csv(csv_path)
@@ -507,66 +510,41 @@ class Data(object):
     @staticmethod
     def store(dataframe, csv_path=None):
 
-        '''
+        """
         Store data loaded in the recommender system to local disk.
-        :param target:
         :param dataframe:
-        :param local:
+        :param csv_path:
         :return:
-        '''
+        """
 
         dataframe.to_csv(csv_path)
         logging.info('Data stored successfully.')
 
-    def test_train_split(self, X, y, share_train=0.8, stratify=None, balance=None, X_label=None):
+    def train_test_split(self, X, y, test_size=0.2, stratify=None, X_label=None):
 
-        '''
-        Create testing and training splits from the provided data. If balance is not None,
-        balances data by upsampling or downsampling (upsample, downsample) using RandomSampling.
-        Requires the imbalanced-learn library.
+        """
+        Create testing and training splits from the provided data.
         :param X:
-        :param Y:
-        :param share_train:
+        :param y:
+        :param test_size:
         :param stratify:
-        :param balance:
-        :param mod:
-        :param min_val:
         :return:
-        '''
+        """
 
         if X.shape[0] != y.shape[0]:
             logging.warning('X and Y are not the same length.', UserWarning)
 
-        # set aside X_test and y_test so that test data is not upsample or downsample data
-        X_train, self.X_test, y_train, self.y_test = train_test_split(
-            X,
-            y,
-            test_size=(1. - share_train),
-            stratify=stratify
-        )
-
+        # capture the dependent and independent variable information
         self.dependent = y.name
         if X_label:
             self.independent = X_label
         else:
             self.independent = list(X.columns.values)
-        self.balance = balance
 
-        if balance == 'upsample':
-            ros = RandomOverSampler()
-            X_resample, y_resample = ros.fit_sample(X_train, y_train)
-        elif balance == 'downsample':
-            rus = RandomUnderSampler()
-            X_resample, y_resample = rus.fit_sample(X_train, y_train)
-        else:
-            X_resample = X
-            y_resample = y
-
-        self.X_train, X_test, self.y_train, y_test = train_test_split(
-            X_resample,
-            y_resample,
-            test_size=(1. - share_train),
+        # set aside X_test and y_test so that test data is not upsample or downsample data
+        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
+            X,
+            y,
+            test_size=test_size,
             stratify=stratify
         )
-
-

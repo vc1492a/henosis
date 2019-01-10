@@ -1,4 +1,4 @@
-'''
+"""
 ========================================================================================================
 Copyright 2017, by the California Institute of Technology. ALL RIGHTS RESERVED.
 United States Government Sponsorship acknowledged. Any commercial use must be negotiated with the Office of Technology
@@ -7,7 +7,7 @@ accepting this software, the user agrees to comply with all applicable U.S. expo
 responsibility to obtain export licenses, or other export authority as may be required before exporting such
 information to foreign countries or providing access to foreign persons.
 ========================================================================================================
-'''
+"""
 
 # imports #
 from gevent import monkey
@@ -16,7 +16,6 @@ monkey.patch_select(aggressive=False)
 from collections import OrderedDict
 import datetime
 from flask import Flask, make_response, render_template
-from flask_cors import CORS
 from flask_restful import Api, reqparse, request, Resource
 from functools import wraps
 from gevent.pywsgi import WSGIServer
@@ -27,29 +26,28 @@ import multiprocessing as mp
 import numpy as np
 import operator
 import pandas as pd
-from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.preprocessing import LabelEncoder
 import sys
 import threading
 import time
 
 from Henosis.model import Models
-from Henosis.utils import Connect, _ElasticSearch, _SessionManager
+from Henosis.utils import Connect, _Elasticsearch, _SessionManager
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 queue = None
 threads = []
 
 __author__ = 'Valentino Constantinou'
-__version__ = '0.0.11'
+__version__ = '0.0.12'
 __license__ = 'Apache License, Version 2.0'
 
 
 # resources #
 class _Auth:
-    '''
+    """
     This class enables simple authentication for routes using the credentials specified in config.yaml.
-    '''
+    """
 
     @staticmethod
     def check_auth(req_username, req_password, config_username=None, config_password=None):
@@ -83,7 +81,7 @@ class _Auth:
 
 
 class _Recommendations(Resource):
-    '''
+    """
     This class is used to interface with the recommender system framework and provide recommendations for fields.
     It accepts a flat JSON of form fields and their values. Empty fields should be passed to the recommender
     system with the specified api.missing tag in config.yaml.
@@ -91,7 +89,7 @@ class _Recommendations(Resource):
     Example request:
     curl http://localhost:5005/api/v0.1/predict -d "formData={'badgeNumber': '1234', 'title': '999999',
     'description': '999999', 'projectName': '999999', 'specificEnvironment': '999999'}"
-    '''
+    """
 
     def __init__(self, server_config):
         self.server_config = server_config
@@ -118,14 +116,14 @@ class _Recommendations(Resource):
 
 
 class _ModelInfo(Resource):
-    '''
+    """
     This class is used to interface with the recommender system framework and provide model information based
     on passed filters: currently supports 'deployed' (true/false) and 'dependent' (name of variable) fields.
     Values of passed fields must be passed as strings and lowercase.
 
     Example request:
     curl http://localhost:5005/api/v0.1/models -d "modelInfo={'dependent': 'projectname', 'deployed': 'true'}"
-    '''
+    """
 
     def __init__(self, server_config):
         self.server_config = server_config
@@ -139,21 +137,21 @@ class _ModelInfo(Resource):
         if args['modelInfo'] is not None:
             formatted = json.loads(args['modelInfo'].replace("'", '"'))
             # obtain the models that match the provided attributes
-            r = _ElasticSearch().Models(self.server_config).get(**formatted)
+            r = _Elasticsearch().Models(self.server_config).get(**formatted)
         else:
-            r = _ElasticSearch().Models(self.server_config).get()
+            r = _Elasticsearch().Models(self.server_config).get()
         response = make_response(json.dumps(r[0]), r[1])
         return response
 
 
 class _RequestLogs(Resource):
-    '''
+    """
     This class is used to interface with the recommender system framework and provide request log information based
     on passed filters. Values of passed fields must be passed as strings and lowercase.
 
     Example request:
     curl http://localhost:5005/api/v0.1/requestlog -d "requestInfo={'responseStatusCode': 200}"
-    '''
+    """
 
     def __init__(self, server_config):
         self.server_config = server_config
@@ -167,52 +165,43 @@ class _RequestLogs(Resource):
         if args['requestInfo'] is not None:
             formatted = json.loads(args['requestInfo'].replace("'", '"'))
             # obtain the request logs that match the provided attributes
-            r = _ElasticSearch().Requests(self.server_config).get(**formatted)
+            r = _Elasticsearch().Requests(self.server_config).get(**formatted)
         else:
-            r = _ElasticSearch().Requests(self.server_config).get()
+            r = _Elasticsearch().Requests(self.server_config).get()
         response = make_response(json.dumps(r[0]), r[1])
         return response
 
 
 class _MultiColumnLabelEncoder:
-    '''
+    """
     This class wraps scikit-learn's LabelEncoder() so that it can be used on multiple
     columns at the same time, e.g. when fitting to X. Many thanks to
     Price Hardman: https://stackoverflow.com/a/30267328/5441252
-    '''
-
-    def __init__(self, columns=None):
-        self.columns = columns
+    """
 
     def fit(self, X, y=None):
-
         return self
 
-    def transform(self, X):
+    @staticmethod
+    def transform(X):
 
-        '''
+        """
         Transforms columns of X specified in self.columns using
         LabelEncoder(). If no columns specified, transforms all
         columns in X.
-        '''
+        """
 
         output = X.copy()
-        if self.columns is not None:
-            for col in self.columns:
-                output[col] = LabelEncoder().fit_transform(output[col])
-        else:
-            for colname, col in output.iteritems():
-                output[colname] = LabelEncoder().fit_transform(col)
-
+        for colname, col in output.iteritems():
+            output[colname] = LabelEncoder().fit_transform(col)
         return output
 
     def fit_transform(self, X, y=None):
-
         return self.fit(X, y).transform(X)
 
 
 class _FormProcessor(object):
-    '''
+    """
     This class accepts form data from the /recommend API endpoint and:
 
     1: determines which fields are empty according to some pre-defined string (999999 in this case).
@@ -224,13 +213,13 @@ class _FormProcessor(object):
     4: return the predicted value
     5: add that predicted value to the scope
 
-    '''
+    """
 
     def __init__(self, server_config):
         self.server_config = server_config
         self.missing = server_config.sys_config.api_missing
         self.missing_fields = []
-        self.index = _ElasticSearch().Models(server_config)
+        self.index = _Elasticsearch().Models(server_config)
         self.model_functions = Models(server_config)
         self.combinations = []
         self.predictions = {}
@@ -251,39 +240,46 @@ class _FormProcessor(object):
         # if the generated variable is not in the form, load the generator and populate the form
         if independent_var['name'] not in form_data.keys() and 'generator_path' in independent_var.keys() and set(independent_var['inputs']) <= set(
                 form_data.keys()):
-            g = self.model_functions._load_from_bucket(independent_var['generator_path'])
+            if self.server_config.sys_config.models_preload_pickles is True and independent_var['generator_path'] in self.server_config.sys_config.pickle_jar.keys():
+                g = self.server_config.sys_config.pickle_jar[independent_var['generator_path']]
+            else:
+                g = self.model_functions._load_from_bucket(independent_var['generator_path'])
             # need way to handle multiple inputs for functions
             input_vals = [form_data[inp] for inp in independent_var['inputs']]
             return g(*input_vals)
         return None
 
-    def conditions_met(self, model_path, deployed_flag, form_data, k, y, X):
+    def conditions_met(self, deployed_flag, form_data, k, y, X):
         if deployed_flag is True and form_data[k] == self.missing and y == k and set(X) <= set(form_data.keys()):
-            if self.server_config.sys_config.models_preload_pickles is True:
-                if model_path in self.server_config.sys_config.pickle_jar.keys():
-                    return True
-                return False
-            else:
-                return True
+            return True
         return False
 
     def load_vectorizer(self, input_data, encoder_type, encoder_path):
         if encoder_type == 'LabelEncoder' and encoder_path is not None:
-            encoder = LabelEncoder()
-            encoder.classes_ = self.model_functions._load_from_bucket(encoder_path)
+
+            # if self.server_config.sys_config.models_preload_pickles is True and encoder_path in self.server_config.sys_config.pickle_jar.keys():
+            #     encoder = self.server_config.sys_config.pickle_jar[encoder_path]
+            # else:
+            #     encoder = LabelEncoder()
+            #
+            # logging.info('we are trying to do things here')
+
+            # encoder.classes_ = self.model_functions._load_from_bucket(encoder_path)
+
             input_data = _MultiColumnLabelEncoder().fit_transform(input_data)
-        elif encoder_type in self.text_vectorizers and encoder_path is not None:
-            if encoder_type == 'CountVectorizer':
-                encoder = CountVectorizer()
-            else:
-                encoder = TfidfVectorizer()
-            encoder = self.model_functions._load_from_bucket(encoder_path)
-            # gather text from columns and place in single list for processing if not empty
+        elif encoder_type in self.text_vectorizers:
+
             X_t = []
             for i in input_data.columns.values:
                 if input_data[i][0] != self.missing:
                     X_t.append(input_data[i][0])
             t = np.asarray([" ".join(str(s) for s in list(X_t))])
+
+            if encoder_path is not None and self.server_config.sys_config.models_preload_pickles is True and encoder_path in self.server_config.sys_config.pickle_jar.keys():
+                encoder = self.server_config.sys_config.pickle_jar[encoder_path]
+            else:
+                encoder = self.model_functions._load_from_bucket(encoder_path)
+
             input_data = encoder.transform(t)
 
         return input_data
@@ -332,7 +328,7 @@ class _FormProcessor(object):
                             self.predictions_proba[k][p].append(proba)
                         self.predictions_proba[k][p].append(probas[p])
         else:
-            logging.warning('Model predictions for field %s did not meet minimum recommendation (confidence) threshold.', k)
+            logging.info('Model predictions for field %s did not meet minimum recommendation (confidence) threshold.', k)
 
     def sort_votes(self):
         for k in self.predictions.keys():
@@ -370,6 +366,9 @@ class _FormProcessor(object):
                 independent_vars.append(i['name'])
                 try:
                     gen_vals = self.generator_check(form_data, i)
+
+                    print('MADE IT HERE? ')
+
                     if gen_vals is not None:
                         form_data[i['name']] = gen_vals
                 except Exception as e:
@@ -377,7 +376,7 @@ class _FormProcessor(object):
                     logging.warning('Error checking for tagged functions.')
                     return False, e
             # ensure form field is missing and that an appropriate model is available and deployed for use
-            if self.conditions_met(m['_source']['modelPath'], m['_source']['deployed'], form_data, k, m['_source']['dependent'], independent_vars):
+            if self.conditions_met(m['_source']['deployed'], form_data, k, m['_source']['dependent'], independent_vars):
                 self.missing_fields.append(k)
                 # process the input data, ensure order
                 try:
@@ -397,7 +396,10 @@ class _FormProcessor(object):
                     return False, e
                 # load the estimator
                 try:
-                    pred_m = self.model_functions._load_from_bucket(m['_source']['modelPath'])
+                    if self.server_config.sys_config.models_preload_pickles is True and m['_source']['modelPath'] in self.server_config.sys_config.pickle_jar.keys():
+                        pred_m = self.server_config.sys_config.pickle_jar[m['_source']['modelPath']]
+                    else:
+                        pred_m = self.model_functions._load_from_bucket(m['_source']['modelPath'])
                 except Exception as e:
                     logging.warning(e)
                     logging.warning('Error loading model.')
@@ -484,7 +486,6 @@ def master_stop_server():
 class Server:
 
     def __init__(self, connection):
-        self.config_yaml_path = None
         self.sc = connection
         self.sys_config = None
         self.es_connection_models = None
@@ -494,9 +495,10 @@ class Server:
         self.routes = None
         self.api_resources = None
         self.base_url = None
+        self.app = None
+        self.api = None
 
     def config(self):
-        self.config_yaml_path = self.config_yaml_path
         self.sys_config = self.sc.sys_config
         self.es_connection_models = self.sc.sys_config.elasticsearch(self.sc.sys_config.elasticsearch_index_models)
         self.es_connection_requestlog = self.sc.sys_config.elasticsearch(self.sc.sys_config.elasticsearch_index_requestlog)
@@ -526,7 +528,7 @@ class Server:
             t_timer.start()
             threads.append(t_timer)
 
-    def start_server(self, routes=None, api_resources=None, port=5005):
+    def configure_server(self, routes=None, api_resources=None, port=5005):
 
         self.port = port
         self.routes = routes
@@ -556,8 +558,7 @@ class Server:
         else:
             app = Flask(__name__)
 
-        # configure cross-origin requests
-        CORS(app, resources={r"/" + self.sys_config.api_index + "/*": {"origins": "*"}})
+        # configure cross-origvggB/app, resources={r"/" + self.sys_config.api_index + "/*": {"origins": "*"}})
 
         # add API resources
         api = Api(app)
@@ -567,15 +568,24 @@ class Server:
         if api_resources:
             for r in api_resources:
                 api.add_resource(r['class'], self.sys_config.api_index + self.sys_config.api_version + r['endpoint'])
+                logging.info('API resource ' + r['class'].__name__ + ' added successfully.')
 
         # add app secret key from config
         app.secret_key = self.sys_config.api_secret
 
-        # spin up app
-        logging.info('Running server on port: ' + str(self.port))
+        # add application to server context
+        self.app = app
+        self.api = api
+
+        return self
+
+    def start_server(self):
 
         # serve the app
-        master_start_server(app, port=self.port)
+        master_start_server(self.app, port=self.port)
+
+        # spin up app
+        logging.info('Starting server on port: ' + str(self.port))
 
     def run(self, routes=None, api_resources=None, port=5005, init=True):
         # create a queue on each restart
@@ -588,12 +598,15 @@ class Server:
 
         # preload pickles
         if self.sys_config.models_preload_pickles is True:
-            self.sys_config.preload_pickles(self)
+            self.sys_config.preload_pickles(server_config=self.sys_config)
+
+        # configure the server
+        self.configure_server(routes, api_resources, port)
 
         # start the new server (starts a thread via master_start_server)
-        self.start_server(routes, api_resources, port)
-        # start the thread that periodically adds to the queue if refresh_pickles is not None
+        self.start_server()
 
+        # start the thread that periodically adds to the queue if refresh_pickles is not None
         if self.sys_config.models_refresh_pickles is not None:
             self.start_queue(q)
         # watching queue
